@@ -2,6 +2,7 @@
 
 #include "gfx.h"
 #include "input.h"
+#include "pause.h"
 #include "lang.h"
 #include "sys.h"
 
@@ -14,6 +15,8 @@ static int pool_used;
 
 menu_t *menu_current;
 static menu_t *menu_last; /* where the menu was when it closed; it reopens there */
+bool menu_pause_world = true;
+static bool menu_pause_owned;
 
 void menu_init(menu_t *menu, const char *title, int cap)
 {
@@ -198,10 +201,29 @@ void menu_goto(menu_t *menu)
 
 void menu_edit(menu_item_t *item) { menu_editing = item; }
 
+static void menu_update_pause(void)
+{
+  if (!menu_current || !menu_pause_world) {
+    if (menu_pause_owned)
+      pause_menu_release();
+    menu_pause_owned = false;
+    return;
+  }
+  if (!menu_pause_owned)
+    menu_pause_owned = pause_menu_acquire();
+}
+
+void menu_set_pause_world(bool on)
+{
+  menu_pause_world = on;
+  menu_update_pause();
+}
+
 void menu_open(menu_t *root)
 {
   enter(menu_last ? menu_last : root);
   input_block_game = true;
+  menu_update_pause();
 }
 
 void menu_close(void)
@@ -210,6 +232,9 @@ void menu_close(void)
   /* reopen in the same submenu; from the top level, start at the root */
   menu_last = menu_current && menu_current->parent ? menu_current : 0;
   menu_current = 0;
+  /* A/B/R+Plus must not become gameplay input on the frame that closes the menu. */
+  input_suppress_until_release(input_held());
+  menu_update_pause();
   input_block_game = false;
   gfx_clear();
 }
@@ -357,30 +382,19 @@ static void activate(menu_item_t *item)
 
 /* --- input ----------------------------------------------------------------------------------- */
 
-/* Numbers: L held makes d-left/right go by NUMBER_BIG_STEP, so their own L (fill) happens when L is
- * let go, and only if the d-pad wasn't used meanwhile. */
-static bool l_down_on_number, l_used_for_big_steps;
-
-/* L and d-left/right on a number; true if they used this frame's input */
+/* L remains a fast-step modifier; A consistently performs the number's action. */
 static bool number_input(menu_item_t *item)
 {
-  bool l_held = (input_held() & BTN_L) != 0;
-  if (input_pressed() & BTN_L) {
-    l_down_on_number = true;
-    l_used_for_big_steps = false;
-  }
-  if (l_held && (input_repeat(BTN_DLEFT) || input_repeat(BTN_DRIGHT))) {
-    l_used_for_big_steps = true;
-    change(item, input_repeat(BTN_DLEFT) ? -NUMBER_BIG_STEP : NUMBER_BIG_STEP);
+  int dir = input_repeat(BTN_DLEFT) ? -1 : input_repeat(BTN_DRIGHT) ? 1 : 0;
+  if (dir) {
+    change(item, dir * ((input_held() & BTN_L) ? NUMBER_BIG_STEP : 1));
     return true;
   }
-  if (!l_held && l_down_on_number) {
-    l_down_on_number = false;
-    if (!l_used_for_big_steps)
-      activate(item);
+  if (input_pressed() & BTN_A) {
+    activate(item);
     return true;
   }
-  return (input_pressed() & BTN_L) != 0; /* just pressed: wait for it to be let go */
+  return false;
 }
 
 /* a page of text: the page moves, the cursor stays on return (menu_draw keeps the scroll in range) */
@@ -390,7 +404,7 @@ static void scroll_text_input(menu_t *menu, menu_item_t *item)
     menu->scroll--;
   else if (input_repeat(BTN_DDOWN))
     menu->scroll++;
-  else if (input_pressed() & BTN_L)
+  else if (input_pressed() & BTN_A)
     activate(item);
 }
 
@@ -399,6 +413,10 @@ void menu_input(void)
   menu_t *menu = menu_current;
   if (!menu || !menu->n_items)
     return;
+  if (input_pressed() & BTN_B) {
+    menu_back();
+    return;
+  }
   menu_item_t *item = &menu->items[menu->selected];
   if (menu_editing) {
     if (menu_editing != item || !item->edit || !item->edit(item))
@@ -409,12 +427,8 @@ void menu_input(void)
     scroll_text_input(menu, item);
     return;
   }
-  if (item->kind == MI_NUMBER) {
-    if (number_input(item))
-      return;
-  } else {
-    l_down_on_number = false;
-  }
+  if (item->kind == MI_NUMBER && number_input(item))
+    return;
   bool has_parts = item->n_parts > 1;
   if (input_repeat(BTN_DUP)) {
     if (!item->on_move || !item->on_move(item, -1))
@@ -430,9 +444,9 @@ void menu_input(void)
     change(item, -1);
   } else if (input_repeat(BTN_DRIGHT)) {
     change(item, 1);
-  } else if (item->press && ((input_pressed() & BTN_L) || (item->press_repeat && input_repeat(BTN_L)))) {
+  } else if (item->press && ((input_pressed() & BTN_A) || (item->press_repeat && input_repeat(BTN_A)))) {
     item->press(item, item->part < item->n_parts ? item->part : 0);
-  } else if (input_pressed() & BTN_L) {
+  } else if (input_pressed() & BTN_A) {
     activate(item);
   }
 }
@@ -523,9 +537,9 @@ static const char *item_hint_english(const menu_item_t *item)
   if (item->hint)
     return item->hint[0] ? item->hint : 0; /* "": no hint */
   switch (item->kind) {
-    case MI_NUMBER: return item->action ? "d-left/right: change (L held: by 10)   L: fill"
+    case MI_NUMBER: return item->action ? "d-left/right: change (L held: by 10)   A: fill"
                                         : "d-left/right: change (L held: by 10)";
-    case MI_OPTION: return "d-left/right or L: change";
+    case MI_OPTION: return "d-left/right or A: change";
     default: return 0;
   }
 }
@@ -655,7 +669,7 @@ static const char *current_hint(const menu_t *menu)
   if (menu_editing && menu_editing->edit_hint)
     hint = T(menu_editing->edit_hint);
   if (menu->scroll_text)
-    hint = T("d-up/down: scroll   L: return");
+    hint = T("d-up/down: scroll   A: return");
   return hint;
 }
 

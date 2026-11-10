@@ -1,7 +1,6 @@
-/* A small gz-style menu: a tree of menus whose items are submenus, actions, checkboxes,
- * option cycles, numbers and read-only lines. Navigation as in gz: D-pad up/down move,
- * left/right change a value, L selects (on an option: next value; on a number: its action,
- * e.g. fill), "return" items go back. Long menus scroll. Drawing goes through gfx.h. */
+/* Practice-menu tree: submenus, actions, checkboxes, options, numbers and read-only lines.
+ * D-pad navigates/changes values, A confirms or activates, B goes back, and L remains a
+ * numeric fast-step modifier. Long menus scroll. Drawing goes through gfx.h. */
 #ifndef MENU_H
 #define MENU_H
 
@@ -19,7 +18,7 @@ struct menu_item {
   menu_item_kind_t kind;
   const char *label;
   menu_t *submenu;                                   /* MI_SUBMENU */
-  void (*action)(menu_item_t *it);                   /* MI_ACTION; MI_NUMBER: on L */
+  void (*action)(menu_item_t *it);                   /* MI_ACTION; MI_NUMBER: on A */
   bool (*get_check)(menu_item_t *it);                /* MI_CHECK */
   void (*set_check)(menu_item_t *it, bool on);
   int  (*get_option)(menu_item_t *it);               /* MI_OPTION: current choice, -1 unknown */
@@ -90,6 +89,8 @@ void menu_end_group(menu_t *m);
 
 /* the open menu (NULL = closed) */
 extern menu_t *menu_current;
+extern bool menu_pause_world; /* default true */
+void menu_set_pause_world(bool on);
 void menu_open(menu_t *root);
 void menu_close(void);
 void menu_back(void);       /* up one level (or ends an edit); closes at the top level */

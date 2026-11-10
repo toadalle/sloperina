@@ -24,6 +24,8 @@ bool     input_combo(uint32_t mask);
 /* Pressed, or held long enough to repeat (menu navigation). */
 bool     input_repeat(uint32_t button);
 void     input_sticks(int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry);
+/* Hide currently-held buttons from the game until each is released. */
+void     input_suppress_until_release(uint32_t mask);
 
 /* While true, the game sees no buttons or sticks. */
 extern bool input_block_game;

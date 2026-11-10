@@ -41,6 +41,7 @@ static uint32_t repeat_buttons;   /* held since they went down, so they repeat *
 static uint32_t buttons_fired;    /* pressed, or repeating this frame */
 static int32_t stick_axes[4];     /* lx, ly, rx, ry */
 static int repeat_countdown;
+static uint32_t suppress_until_release;
 bool input_block_game;
 uint32_t input_hide_from_game;
 
@@ -75,6 +76,7 @@ void input_update(void)
   read_npad(hid_detail_joydual, NPAD_NO1);
   read_npad(hid_detail_handheld, NPAD_HANDHELD);
   buttons_pressed = buttons_held & ~previously_held;
+  suppress_until_release &= buttons_held;
 
   buttons_fired = buttons_pressed;
   if (buttons_pressed) {
@@ -93,6 +95,11 @@ void input_update(void)
 
 uint32_t input_held(void) { return buttons_held; }
 uint32_t input_pressed(void) { return buttons_pressed; }
+
+void input_suppress_until_release(uint32_t mask)
+{
+  suppress_until_release |= mask & buttons_held;
+}
 
 bool input_combo(uint32_t mask)
 {
@@ -141,7 +148,7 @@ int32_t input_force_stick[4];
  * advance's buffered input and take out the buttons the game mustn't see. */
 static void filter_game_states(void *states, int count)
 {
-  if (!input_block_game && !input_hide_from_game && !input_force_active)
+  if (!input_block_game && !input_hide_from_game && !input_force_active && !suppress_until_release)
     return;
   for (int i = 0; i < count; i++) {
     npad_state_t *state = (npad_state_t *)((char *)states + i * NPAD_STATE_SIZE);
@@ -161,7 +168,7 @@ static void filter_game_states(void *states, int count)
         state->ry = input_force_stick[3];
       }
     }
-    state->buttons &= ~(uint64_t)input_hide_from_game;
+    state->buttons &= ~(uint64_t)(input_hide_from_game | suppress_until_release);
   }
 }
 

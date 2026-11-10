@@ -46,18 +46,16 @@ typedef uint64_t (*gd_unlock_t)(void *lock);
 static bool started;
 static uint32_t frames_run;
 
-#define MENU_COMBO (BTN_R | BTN_RS_DOWN) /* gz: R + C-down */
-#define BACK_COMBO (BTN_R | BTN_DLEFT)   /* up one level; closes at the top */
+#define MENU_COMBO (BTN_R | BTN_PLUS) /* dedicated practice-menu shortcut */
 
 /* --- frame advance ---------------------------------------------------------------------------
  * With it on (settings > frame advance), a tap of its button (L or R, menu closed) pauses the game:
  * this hook, on the game's thread, holds it here, as a debugger's breakpoint would. While held, a
- * tap lets one frame through, and the button + L3 lets it run again; the menu still opens (R + right
- * stick down) and works as usual. gz's pause icon shows at the top left. The game never sees the
+ * tap lets one frame through, and the button + L3 lets it run again; the menu still opens (R + Plus) and works as usual. gz's pause icon shows at the top left. The game never sees the
  * button while it's on.
  * As in gz, everything else can be held or pressed meanwhile (the stick, A, Z...): the frame let
  * through reads the controller as it is, plus what was buffered while paused. Only R's shortcuts
- * (R + right stick down, R + d-pad...) don't count as a tap, so they don't pause the game; L has none. */
+ * (R + Plus, R + d-pad...) don't count as a tap, so they don't pause the game; L has none. */
 bool frame_advance = true;
 bool pause_display = true;
 int frame_advance_button; /* 0 L, 1 R */
@@ -98,7 +96,7 @@ static uint32_t fa_button_bit(void) { return frame_advance_button ? BTN_R : BTN_
 /* What, held or pressed with the button, makes it a shortcut rather than a tap. */
 static uint32_t fa_shortcut_keys(void)
 {
-  return frame_advance_button ? (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT | BTN_RS_DOWN) : 0;
+  return frame_advance_button ? (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT | BTN_PLUS) : 0;
 }
 
 static fa_event_t fa_read_button(void)
@@ -163,8 +161,6 @@ static bool menu_controls(void)
     menu_open(&menu_root);
   else if (menu_current && input_combo(MENU_COMBO))
     menu_close(); /* the open combo toggles it */
-  else if (menu_current && input_combo(BACK_COMBO))
-    menu_back();
   else if (menu_current) {
     watches_sync();
     menu_input();

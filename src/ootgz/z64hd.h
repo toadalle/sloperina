@@ -51,6 +51,7 @@ struct z64hd_build {
   uint32_t disp_ptr;
   uint32_t camera_ptr;
   uint32_t frame_counter;
+  uint32_t pause_mgr_ptr; /* PauseManager* global; 0 when not known for this build */
   uint32_t actor_mgr_ptr; /* the actor manager (actors.c); 0: not known for this build */
   uint32_t vt_life;       /* the Life component's vtable */
   /* Link's character controller (cct.c; FINDINGS "Native collision bypass"); 0: not known for this build */
