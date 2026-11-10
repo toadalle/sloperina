@@ -988,6 +988,15 @@ static void frame(bool menu_open)
     else if (speed_buttons == BTN_A)
       adjust_flight_speed(1);
   }
+  /* R + R3 is contextual: flight-speed reset in hover, and an ordinary
+   * walking wall-pass toggle otherwise. Reuse the existing wall bypass,
+   * which leaves standard floor collision on until actually blocked and
+   * holds the current feet height only during a pass. */
+  if (!menu_open && !floating && (input_held() & BTN_R) && (input_pressed() & BTN_RSTICK)) {
+    cheats[CHEAT_WALLS] = !cheats[CHEAT_WALLS];
+    input_suppress_until_release(BTN_RSTICK);
+    gfx_notice(cheats[CHEAT_WALLS] ? "walk through walls on" : "walk through walls off");
+  }
   if (!menu_open && floating && (input_pressed() & BTN_RSTICK)) {
     if (input_held() & BTN_R) {
       /* R + R3 resets the flight-speed preset. Do not toggle ghost. */

@@ -56,6 +56,7 @@ void input_sticks(int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry)
 { *lx = stick_x; *ly = *rx = *ry = 0; }
 void log_printf(const char *fmt, ...) { (void)fmt; }
 void gfx_notice(const char *s) { (void)s; }
+void input_suppress_until_release(uint32_t mask) { (void)mask; }
 
 static void sync_drawn(void)
 {
@@ -223,6 +224,38 @@ static void test_vertical_controls(void)
   levitate_frame(false);
   assert(!floating && input_hide_from_game == BTN_LSTICK);
   puts("PASS: X/B ascent/descent, hover, reversal, both/hold/menu, floor bypass and button masking");
+}
+
+static void test_walk_wall_shortcut(void)
+{
+  start(false);
+  floating = moving_link = false;
+  cheats[CHEAT_WALLS] = false;
+  held = BTN_R | BTN_RSTICK;
+  pressed = BTN_RSTICK;
+  levitate_frame(false);
+  assert(cheats[CHEAT_WALLS] && !floating && !levitate_through_walls);
+  held = BTN_R;
+  pressed = 0;
+  levitate_frame(false);
+  assert(cheats[CHEAT_WALLS]);
+  held = BTN_R | BTN_RSTICK;
+  pressed = BTN_RSTICK;
+  levitate_frame(false);
+  assert(!cheats[CHEAT_WALLS]);
+  start(false);
+  cheats[CHEAT_WALLS] = false;
+  held = BTN_R | BTN_RSTICK;
+  pressed = BTN_RSTICK;
+  levitate_frame(true);
+  assert(!cheats[CHEAT_WALLS]); /* practice menu doesn't toggle */
+  start(false);
+  cheats[CHEAT_WALLS] = false;
+  held = BTN_R | BTN_RSTICK;
+  pressed = BTN_RSTICK;
+  levitate_frame(false);
+  assert(floating && levitate_move_speed == 6 && !cheats[CHEAT_WALLS]);
+  puts("PASS: walking R+R3 toggles existing wall pass, hover resets speed, menu guard");
 }
 
 static void test_flight_speed_buttons(void)
@@ -427,6 +460,7 @@ int main(void)
   test_vertical_controls();
   test_ghost_toggle();
   test_flight_speed_buttons();
+  test_walk_wall_shortcut();
   test_controller_path();
   return 0;
 }
