@@ -9,6 +9,8 @@ in Fritchii yet. Keep `master` on the known-working release until runtime tests 
 ### Practice menu foundation
 
 - R + Plus toggles the practice menu.
+- The HID wrapper removes the R + Plus activation chord from the same game read
+  that detects it, so the stock Plus pause screen cannot win the input race.
 - A confirms/activates; B goes back; D-pad navigates and edits values.
 - Buttons held while the menu closes are suppressed until release so the close
   action does not leak into gameplay or open the normal Plus menu.
@@ -63,7 +65,8 @@ This path is source-reviewed but **runtime-unvalidated**.
 ## Runtime test checklist
 
 1. Confirm the v0.0.3 release still works before installing this branch.
-2. Build and install this branch for game 1.1.1.
+2. Download the CI artifact for this branch (or build locally) and install the
+   staged `dist/lichii` tree for game 1.1.1.
 3. Press R + Plus from gameplay:
    - practice menu opens;
    - native Plus pause screen does not also open;
@@ -115,6 +118,13 @@ implementation has been added.
 
 ## Build validation
 
-`.github/workflows/build.yml` runs `./docker-make` using the same devkitA64
-container documented by the repository. A green build confirms compilation and
-linking only; it does not count as Fritchii validation.
+`.github/workflows/build.yml` runs the existing host regression suites first,
+then `./docker-make dist` with the repository's devkitA64 container. The host
+tests cover levitation/CCT lifecycle, the new ghost toggle and stick masking,
+settings persistence, watches and menu/HUD regressions.
+
+On success CI uploads a seven-day `sloperina-stage1-<sha>` artifact containing
+the repository's existing staged install trees, including `dist/lichii` for
+Lichii/Fritchii-style mod directories. A green workflow confirms host behavior
+covered by those mocks plus native compilation/linking; it still does **not**
+count as Fritchii runtime validation.
