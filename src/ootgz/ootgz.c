@@ -46,8 +46,6 @@ typedef uint64_t (*gd_unlock_t)(void *lock);
 static bool started;
 static uint32_t frames_run;
 
-#define MENU_COMBO (BTN_R | BTN_PLUS) /* dedicated practice-menu shortcut */
-
 /* --- frame advance ---------------------------------------------------------------------------
  * With it on (settings > frame advance), a tap of its button (L or R, menu closed) pauses the game:
  * this hook, on the game's thread, holds it here, as a debugger's breakpoint would. While held, a
@@ -157,9 +155,9 @@ static fa_event_t fa_read_button(void)
 /* Opens, closes and drives the menu. Returns true if the input was the menu's. */
 static bool menu_controls(void)
 {
-  if (!menu_current && input_combo(MENU_COMBO))
+  if (!menu_current && input_combo(PRACTICE_MENU_COMBO))
     menu_open(&menu_root);
-  else if (menu_current && input_combo(MENU_COMBO))
+  else if (menu_current && input_combo(PRACTICE_MENU_COMBO))
     menu_close(); /* the open combo toggles it */
   else if (menu_current) {
     watches_sync();

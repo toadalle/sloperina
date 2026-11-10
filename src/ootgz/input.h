@@ -16,6 +16,10 @@ enum {
   BTN_RS_LEFT = 1u << 20, BTN_RS_UP = 1u << 21, BTN_RS_RIGHT = 1u << 22, BTN_RS_DOWN = 1u << 23,
 };
 
+/* Dedicated practice-menu activation chord. The HID wrapper uses the same constant
+ * so Plus can be hidden from the game on the exact read that sees the chord. */
+#define PRACTICE_MENU_COMBO (BTN_R | BTN_PLUS)
+
 void     input_update(void);       /* once per frame, from the frame hook */
 uint32_t input_held(void);
 uint32_t input_pressed(void);      /* went down this frame */
