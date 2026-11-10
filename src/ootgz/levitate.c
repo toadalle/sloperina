@@ -8,7 +8,7 @@
  * each (kept only if his drawn position follows; put back at once otherwise). The pointer path to the
  * one that works is logged, so a later version can go straight to it.
  *
- * Hover: L3 toggles it, R3 toggles ghost collision while hovering, X rises, B descends,
+ * Hover is toggled from the menu. X rises and B descends,
  * and releasing both holds altitude. The left stick moves him
  * relative to the camera. Walls: the game pushes
  * Link back out of them between our writes; a push-back is a move against his heading (after he has
@@ -52,22 +52,7 @@ int levitate_move_speed = FLIGHT_SPEED_DEFAULT;  /* stick, units/s */
 /* Shared with the move-speed menu options: one Y/A tap moves one preset. */
 static const int flight_speeds[] = { 2, 4, 6, 8, 12, 20, 30 };
 
-static void adjust_flight_speed(int direction)
-{
-  int index = 0;
-  if (direction > 0) {
-    while (index < (int)(sizeof(flight_speeds) / sizeof(flight_speeds[0])) - 1 &&
-           flight_speeds[index] <= levitate_move_speed)
-      index++;
-  } else {
-    index = (int)(sizeof(flight_speeds) / sizeof(flight_speeds[0])) - 1;
-    while (index > 0 && flight_speeds[index] >= levitate_move_speed)
-      index--;
-  }
-  levitate_move_speed = flight_speeds[index];
-  log_printf("levitate: flight speed %d", levitate_move_speed);
-  gfx_notice(direction > 0 ? "flight faster" : "flight slower");
-}
+
 
 /* the physics record: position (3 doubles), then motion state (12 words) */
 #define RECORD_POS_SIZE 24
@@ -519,7 +504,7 @@ static double controller_y_offset; /* physics centre relative to drawn feet */
 static uintptr_t float_actor, landing_actor;
 static unsigned landed_frames;
 
-static bool floating;              /* L3 turned it on */
+static bool floating;              /* requested from the practice menu */
 static bool phasing;               /* walk through walls has Link's collision off (cct.c); not floating */
 static bool moving_link;           /* we're writing Link's position */
 static double pos_x, pos_y, pos_z; /* our position for him */
@@ -558,7 +543,7 @@ static void drop(void)
      * from rest once, then let normal gravity take over. Also clear the legacy
      * record's two vertical fields; the controller API above is essential.
      * Never change position, horizontal motion or the full WAKE search_state here.
-     * Revalidate here: L3 is handled before this frame's normal record-loss check. */
+     * Revalidate here: the menu can toggle hover between record checks. */
     bool zero;
     if (search_state == SEARCH_READY && record_has_motion && record_follows_link() &&
         plausible_motion(record + 24, &zero)) {
@@ -591,7 +576,7 @@ static void float_start(void)
 static void steer(double dt)
 {
   float_clock += dt;
-  uint32_t buttons = input_held() & ~input_shortcut_held();
+  uint32_t buttons = input_gameplay_held();
   int vertical = !!(buttons & BTN_X) - !!(buttons & BTN_B);
   double move = levitate_move_speed;
   double rise = (levitate_speed > 0 ? levitate_speed : 4) * move / FLIGHT_SPEED_DEFAULT;
@@ -660,7 +645,7 @@ static void float_step(double dt, bool menu_open)
     return;
   }
   last_drawn = drawn;
-  uint32_t buttons = input_held() & ~input_shortcut_held();
+  uint32_t buttons = input_gameplay_held();
   int vertical = !!(buttons & BTN_X) - !!(buttons & BTN_B);
   bool descend_through_floor = !menu_open && levitate_through_walls && vertical < 0;
   if (cy > pos_y && !descend_through_floor && !cct_noclip_active())
@@ -920,29 +905,23 @@ static void protect_landing(bool menu_open)
     }
   }
 
-  /* L3: start / stop */
 }
 
-/* L3: start / stop */
-static void handle_l3(bool menu_open)
+bool levitate_hovering(void) { return floating; }
+
+void levitate_set_hover(bool on)
 {
-  if (!levitate_enabled) {
+  if (on == floating || (on && !levitate_enabled))
+    return;
+  if (levitate_reset_speed)
+    levitate_move_speed = FLIGHT_SPEED_DEFAULT;
+  if (!on) {
     drop();
-  } else if (!menu_open && (input_pressed() & BTN_LSTICK) && !(input_held() & (BTN_L | BTN_DRIGHT))) {
-    /* L or D-right + L3 is reserved by frame advance; avoid a hover toggle as a side effect. */
-    if (levitate_reset_speed)
-      levitate_move_speed = FLIGHT_SPEED_DEFAULT;
-    if (floating) {
-      drop();
-      gfx_notice("levitate off");
-    } else {
-      floating = true;
-      levitate_through_walls = levitate_ghost_default;
-      quiet_search = false;
-      if (search_state != SEARCH_READY)
-        gfx_notice("hover: locating Link");
-    }
+    return;
   }
+  floating = true;
+  levitate_through_walls = levitate_ghost_default;
+  quiet_search = false;
 }
 
 /* Advance a running search. True while one runs: nothing else happens on those frames. */
@@ -1092,37 +1071,8 @@ static void frame(bool menu_open)
     }
   }
   protect_landing(menu_open);
-  handle_l3(menu_open);
-  if (!menu_open && floating) {
-    uint32_t speed_buttons = input_pressed() & (BTN_Y | BTN_A);
-    if (input_shortcut_held())
-      speed_buttons = 0;
-    /* Both pressed at once are a no-op; other input stays fully available. */
-    if (speed_buttons == BTN_Y)
-      adjust_flight_speed(-1);
-    else if (speed_buttons == BTN_A)
-      adjust_flight_speed(1);
-  }
-  /* D-right + R3 is contextual: flight-speed reset in hover, and an ordinary
-   * walking wall-pass toggle otherwise. Reuse the existing grounded wall bypass,
-   * which leaves standard floor collision on until actually blocked and
-   * holds the current feet height only during a pass. */
-  if (!menu_open && !floating && input_shortcut(HOVER_ACTION_COMBO)) {
-    cheats[CHEAT_WALLS] = !cheats[CHEAT_WALLS];
-    input_suppress_until_release(HOVER_ACTION_COMBO);
-    gfx_notice(cheats[CHEAT_WALLS] ? "walk through walls on" : "walk through walls off");
-  }
-  if (!menu_open && floating && (input_shortcut(HOVER_ACTION_COMBO) || (input_pressed() & BTN_RSTICK))) {
-    if (input_shortcut_held() == HOVER_ACTION_COMBO) {
-      input_suppress_until_release(HOVER_ACTION_COMBO);
-      /* D-right + R3 resets the flight-speed preset. Do not toggle ghost. */
-      levitate_move_speed = FLIGHT_SPEED_DEFAULT;
-      gfx_notice("flight speed reset: 6");
-    } else {
-      levitate_through_walls = !levitate_through_walls;
-      gfx_notice(levitate_through_walls ? "ghost mode on" : "ghost mode off");
-    }
-  }
+  if (!levitate_enabled && floating)
+    levitate_set_hover(false);
 
   if (!floating && !requested && !cheats[CHEAT_SPEED] && !cheats[CHEAT_WALLS] &&
       (search_state == SEARCH_FINDING || search_state == SEARCH_TESTING))
@@ -1210,8 +1160,7 @@ void levitate_frame(bool menu_open, bool native_ui)
     cct_noclip_end();
   /* Update after toggles, failed searches and scene changes as well as normal steps.
    * Our input reads remain raw; only the game's HID wrappers mask these buttons. */
-  input_hide_from_game = (levitate_enabled ? BTN_LSTICK : 0) |
-                         (floating ? BTN_RSTICK | BTN_X | BTN_B | BTN_Y | BTN_A : 0);
+  input_hide_from_game = floating ? BTN_X | BTN_B : 0;
   /* Hover owns horizontal movement; keep the right stick available to the camera. */
   input_hide_sticks_from_game = floating ? INPUT_HIDE_LEFT_STICK : 0;
 }

@@ -24,12 +24,12 @@ uintptr_t z64hd_main;
 static const struct z64hd_build test_build; /* no build: the version-specific paths stay off */
 const struct z64hd_build *z64hd_game = &test_build;
 bool enemy_hp_shown;
-bool cheats[CHEAT_COUNT], frame_advance, pause_display, warp_arrival_cutscenes;
-bool collision_mesh_shown, baked_barriers_shown = true;
+bool cheats[CHEAT_COUNT], pause_display, warp_arrival_cutscenes;
+bool baked_barriers_shown = true;
 bool levitate_enabled, levitate_through_walls, loading_zones_shown, void_zones_shown, airwalls_shown, airwalls_all;
 bool levitate_reset_speed = true;
 bool levitate_ghost_default;
-int frame_advance_button, levitate_speed = 5, levitate_move_speed = 5;
+int levitate_speed = 5, levitate_move_speed = 5;
 
 static uintptr_t actor, first, player, base;
 static uint32_t value;

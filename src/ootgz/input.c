@@ -144,14 +144,18 @@ void input_set_native_ui(bool owned)
 
 static uint32_t shortcut_mask(uint64_t buttons)
 {
-  uint32_t directions = buttons & (BTN_DLEFT | BTN_DRIGHT);
-  if (directions != BTN_DLEFT && directions != BTN_DRIGHT)
+  if (!(buttons & BTN_DRIGHT))
     return 0;
-  uint32_t action = buttons & (directions == BTN_DRIGHT ? PRACTICE_RIGHT_ACTIONS : PRACTICE_LEFT_ACTIONS);
-  return action && !(action & (action - 1)) ? directions | action : 0;
+  uint32_t action = buttons & PRACTICE_RIGHT_ACTIONS;
+  return action && !(action & (action - 1)) ? BTN_DRIGHT | action : 0;
 }
 
 uint32_t input_shortcut_held(void) { return shortcut_mask(buttons_held); }
+
+uint32_t input_gameplay_held(void)
+{
+  return buttons_held & ~(input_shortcut_held() | __atomic_load_n(&suppress_until_release, __ATOMIC_RELAXED));
+}
 
 bool input_shortcut(uint32_t combo)
 {
@@ -198,13 +202,7 @@ int hid_public_2(void *, int, const uint32_t *) __asm__(PUBLIC("16NpadJoyDualSta
 int hid_public_3(void *, int, const uint32_t *) __asm__(PUBLIC("16NpadJoyLeftState"));
 int hid_public_4(void *, int, const uint32_t *) __asm__(PUBLIC("17NpadJoyRightState"));
 
-bool input_force_active;
-uint32_t input_force_buttons;
-bool input_force_sticks[2];
-int32_t input_force_stick[4];
-
-/* Edit the states the game just read: blank them while the menu is open, otherwise add frame
- * advance's buffered input and take out the buttons the game mustn't see. */
+/* Edit the states the game just read to isolate the practice menu and chords. */
 static void filter_game_states(void *states, int count, int style, uint32_t id)
 {
   if (__atomic_load_n(&native_ui_owns_input, __ATOMIC_ACQUIRE))
@@ -229,17 +227,6 @@ static void filter_game_states(void *states, int count, int style, uint32_t id)
       state->buttons = 0;
       state->lx = state->ly = state->rx = state->ry = 0;
       continue;
-    }
-    if (input_force_active) {
-      state->buttons |= input_force_buttons;
-      if (input_force_sticks[0]) {
-        state->lx = input_force_stick[0];
-        state->ly = input_force_stick[1];
-      }
-      if (input_force_sticks[1]) {
-        state->rx = input_force_stick[2];
-        state->ry = input_force_stick[3];
-      }
     }
     state->buttons &= ~(uint64_t)(hidden_buttons | shortcut);
     if (hidden_sticks & INPUT_HIDE_LEFT_STICK)

@@ -17,24 +17,24 @@ available on 1.0.0 where the corresponding fields can be read.
    still open the stock pause screen. While playing the ocarina, hold D-pad right and
    press A. The note should play and the practice menu should stay closed.
    While hovering, open a dialogue box and verify that A and B work normally
-   until the box closes. Hover should resume after those buttons are released. Test opening from a bumper frame-advance
+   until the box closes. Hover should resume after those buttons are released. Test opening from a menu-triggered frame-advance
    hold and verify that closing returns to the hold. If backdrop capture
    fails, native pause still runs and the log reports the capture failure.
    The game can hide actors during this fallback. If native pause itself
    is unavailable, the dashboard stays LIVE. Check Settings > Show gameplay
-   mini-HUD or use D-pad left + B to hide or show the mod's watch overlay.
-2. **Flight presets.** Start hover with L3. At low and high presets, compare
+   mini-HUD to hide or show the mod's watch overlay.
+2. **Flight presets.** Enable Hover Active. At low and high presets, compare
    horizontal travel and the distance covered by holding X or B for the same
-   time. Y/A step the preset, D-pad right + R3 sets it to 6, and X+B holds altitude.
+   time. Use Flight Speed in the menu to change the preset. X+B holds altitude.
    The base rise speed is the X/B speed at preset 6. Change Settings →
-   Reset flight speed on hover toggle. Confirm that speed resets on both L3
+   Reset flight speed on hover toggle. Confirm that speed resets on both hover
    edges when enabled and is retained on both edges when disabled.
-   In Cheats → Levitate, enable **Start hover in ghost mode**. Start with L3,
-   turn ghost off with R3, then drop and start again. Ghost should start on
+   In Cheats → Levitate, enable **Start hover in ghost mode**. Start with Hover Active,
+   turn off Ghost While Hovering, then drop and start again. Ghost should start on
    both times. Repeat with the setting disabled and after reloading the ROM.
 3. **Recovery.** Hover in place for several seconds in normal and ghost mode,
    then move. In ghost mode, void out, wait until gameplay is back, and press
-   L3 again. Repeat around a natural scene exit, including with a record search
+   Hover Active again. Repeat around a natural scene exit, including with a record search
    in progress. The old hover should release at transition, actor replacement,
    or a large relocation. Check for ordinary collision on arrival and capture
    the log if a black screen remains or hover fails to restart.
@@ -55,9 +55,9 @@ available on 1.0.0 where the corresponding fields can be read.
    route, controls and expected behavior with the two captures.
    If a traversal action briefly swaps Link's controller, check that the log
    records a deferred collision restore for the old body. After Link can
-   move again, press L3 to restart hover even if the old body has yet to return.
+   move again, enable Hover Active again even if the old body has yet to return.
    If it returns, check that its original collision mode is restored. Test ordinary walking separately.
-   D-pad right + R3 toggles wall-pass. A pass now requires native ground contact
+   Enable walking wall-pass in Cheats > Movement. A pass now requires native ground contact
    at entry and temporarily holds height while passing.
 
 ## Investigating a loading stall

@@ -14,7 +14,6 @@
 
 #include "gamedata.h"
 #include "gfx.h"
-#include "input.h"
 #include "levitate.h"
 #include "link.h"
 #include "sys.h"
@@ -139,14 +138,6 @@ static void settle_step(void)
 
 void position_frame(bool menu_open)
 {
-  if (!menu_open && input_shortcut(SAVE_POSITION_COMBO)) {
-    input_suppress_until_release(SAVE_POSITION_COMBO);
-    position_save();
-  } else if (!menu_open && input_shortcut(LOAD_POSITION_COMBO)) {
-    input_suppress_until_release(LOAD_POSITION_COMBO);
-    position_load();
-  }
-
   link_record_status_t st = link_record_status();
   if (finding && st == REC_READY) {
     finding = false;
@@ -156,7 +147,7 @@ void position_frame(bool menu_open)
     gfx_notice("Link's position not found, move around and try again");
   }
 
-  if (pending && !menu_open && st == REC_READY && !(input_held() & LOAD_POSITION_COMBO)) {
+  if (pending && !menu_open && st == REC_READY) {
     pending = false;
     writes = 0;
     if (write_saved()) {

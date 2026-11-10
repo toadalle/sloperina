@@ -18,20 +18,11 @@ enum {
 
 /* Shared practice shortcuts for input dispatch and HID filtering. */
 #define PRACTICE_MENU_COMBO (BTN_DRIGHT | BTN_PLUS)
-#define MINI_HUD_COMBO      (BTN_DLEFT | BTN_B)
 #define OVERLAY_TOGGLE_COMBO (BTN_DRIGHT | BTN_MINUS)
-#define OVERLAY_TOGGLE_ALT   (BTN_DRIGHT | BTN_X)
-#define VOID_BYPASS_COMBO    (BTN_DRIGHT | BTN_Y)
-#define SAVE_POSITION_COMBO  (BTN_DLEFT | BTN_X)
-#define LOAD_POSITION_COMBO  (BTN_DLEFT | BTN_Y)
-#define HOVER_ACTION_COMBO  (BTN_DRIGHT | BTN_RSTICK)
-#define TIMER_TOGGLE_COMBO  (BTN_DRIGHT | BTN_A)
-#define TIMER_PAUSE_COMBO   (BTN_DRIGHT | BTN_B)
-#define TIMER_RESET_COMBO   (BTN_DLEFT | BTN_MINUS)
-#define LAG_RESET_COMBO     (BTN_DLEFT | BTN_PLUS)
-#define PRACTICE_LEFT_ACTIONS (BTN_B | BTN_X | BTN_Y | BTN_MINUS | BTN_PLUS)
-#define JS_RESET_COMBO      (BTN_DRIGHT | BTN_ZL)
-#define PRACTICE_RIGHT_ACTIONS (BTN_A | BTN_B | BTN_X | BTN_Y | BTN_RSTICK | BTN_MINUS | BTN_PLUS | BTN_ZL)
+#define VOID_BYPASS_COMBO    (BTN_DRIGHT | BTN_X)
+#define TIMER_TOGGLE_COMBO   (BTN_DRIGHT | BTN_A)
+#define TIMER_PAUSE_COMBO    (BTN_DRIGHT | BTN_B)
+#define PRACTICE_RIGHT_ACTIONS (BTN_A | BTN_B | BTN_X | BTN_MINUS | BTN_PLUS)
 
 void     input_update(void);       /* once per frame, from the frame hook */
 uint32_t input_held(void);
@@ -50,17 +41,13 @@ void input_set_menu_block(bool block);
 void input_set_native_ui(bool owned);
 bool input_shortcut(uint32_t combo); /* either button completes the chord */
 uint32_t input_shortcut_held(void);
+uint32_t input_gameplay_held(void);
 bool input_menu_releasing(void); /* game thread: mod gameplay shortcuts stay suppressed too */
 /* Buttons the game never sees (e.g. L while levitate is on). */
 extern uint32_t input_hide_from_game;
 enum { INPUT_HIDE_LEFT_STICK = 1u << 0, INPUT_HIDE_RIGHT_STICK = 1u << 1 };
 /* Stick axes hidden from gameplay while raw input remains available to the mod. */
 extern uint32_t input_hide_sticks_from_game;
-/* given to the game on top of the controller until cleared (frame advance's buffered input) */
-extern bool input_force_active;
-extern uint32_t input_force_buttons;
-extern bool input_force_sticks[2];       /* left, right: use the values below */
-extern int32_t input_force_stick[4];     /* lx, ly, rx, ry */
 /* Point main's nn::hid imports at our wrappers (module init); returns 0 or a message. */
 const char *input_hook_game(uintptr_t main_base);
 

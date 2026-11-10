@@ -148,16 +148,15 @@ int main(int argc, char **argv)
     uint32_t cave = build->cave_start + OOTGZ_VOID_STUB_OFF;
     uint32_t accept = build->void_contact_accept;
     uint32_t native_next = build->void_contact_site + 4;
-    /* Preserve the native tst result. The second native mask bit (9)
-     * always takes the original branch; only the sampled bit 3 is optional. */
+    /* Preserve the native tst result. Both bits in this specific selector
+     * branch have been observed in Kakariko contact void-outs. */
     uint32_t contact[] = {
-      insn_cond(cave, cave + 24, 0), /* b.eq to native fallthrough */
-      insn_tbnz(9, 9, cave + 4, cave + 20),
-      insn_adrp(X16, cave + 8, build->hook_slot),
+      insn_cond(cave, cave + 20, 0), /* b.eq to native fallthrough */
+      insn_adrp(X16, cave + 4, build->hook_slot),
       insn_ldr_x(X16, X16, build->hook_slot & 0xFFF),
-      insn_tbnz(X16, 0, cave + 16, cave + 24),
-      insn_b(cave + 20, accept),
-      insn_b(cave + 24, native_next),
+      insn_tbnz(X16, 0, cave + 12, cave + 20),
+      insn_b(cave + 16, accept),
+      insn_b(cave + 20, native_next),
     };
     uint8_t body[sizeof(contact)];
     if (cave + sizeof(body) > build->cave_end) {

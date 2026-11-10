@@ -846,21 +846,6 @@ static void command_input(void)
       if (timer_pause_toggle())
         gfx_notice(timer_running ? "timer resumed" : "timer paused");
       break;
-    case TIMER_RESET_COMBO:
-      timer_reset();
-      gfx_notice("timer reset");
-      break;
-    case LAG_RESET_COMBO:
-      lag_reset();
-      gfx_notice("lag counter reset");
-      break;
-    case JS_RESET_COMBO:
-      gfx_notice(js_height_reset() ? "JS Height reset" : "JS Height: Link not found");
-      break;
-    case MINI_HUD_COMBO:
-      watches_shown = !watches_shown;
-      gfx_notice(watches_shown ? "mini-HUD shown" : "mini-HUD hidden");
-      break;
     default:
       return;
   }

@@ -54,6 +54,7 @@ static void add_rect(aw_dot_t *out, int *n, float x0, float y0, float x1, float 
   r->y0 = to_unit16(y0, REF_HEIGHT);
   r->y1 = to_unit16(y1, REF_HEIGHT);
   r->color = color;
+  r->fill = false;
 }
 
 /* --- seven-segment text ---------------------------------------------------------------------------- */

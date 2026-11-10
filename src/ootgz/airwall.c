@@ -1,16 +1,7 @@
-/* Air walls: port of airwall.py (FINDINGS §5.11), drawn as dotted outlines.
- *
- * Walls come from data.c (airwalls.json, built from the map layouts by tools/airwalls.py). A wall's
- * world point for a local shape point p is t + R (s * p), with R = Rz Ry Rx from its rotation, as
- * sead's makeR. Each frame the walls within AW_RANGE of the camera are projected with the game's
- * camera (+0x38 position, +0x44 look-at, +0x130 vertical fov, +0x140 aspect) and their edges turned
- * into rectangles, nearest wall first, which nvn.c draws by clearing them (no shaders). Edges within
- * about 19 degrees of level or upright are solid lines of a few long rectangles (a staircase); steeper
- * ones are dots, which takes fewer clears than a staircase there. (FINDINGS §5.11 had see-through
- * faces; here only the outlines, and like the Python view they show through scenery.) */
+/* Project placed volumes and authored boundary planes into bounded rectangles.
+ * The NVN clear path draws continuous stepped borders and sparse fill bands. */
 #include "airwall.h"
 
-#include "collision_mesh.h"
 #include "data.h"
 #include "diagnostics.h"
 #include "gamedata.h"
@@ -36,9 +27,7 @@ bool loading_zones_shown, void_zones_shown;
 #define MAX_RECTS_PER_EDGE 18
 #define REF_WIDTH 1920    /* the picture is worked out in pixels of a 1920x1080 one */
 #define REF_HEIGHT 1080
-#define DOT_SPACING 12.0f  /* reference pixels between dots */
 #define LINE_WIDTH 2.0f   /* reference pixels: a line's thickness, one staircase step at most */
-#define STRAIGHT 0.344f   /* tan 19 degrees: up to this slope a staircase takes fewer clears */
 #define NEAR_PLANE 0.05f
 #define PHYS_Y 0.585f     /* Link's physics position is this far above his drawn one */
 #define FACE_UPRIGHT 0.7f /* a face normal with more height than this points up (or down) */
@@ -356,6 +345,7 @@ static void add_rect(aw_dot_t *out, int *n, float ax, float ay, float bx, float 
   rect->y0 = to_unit16(ay < by ? ay : by, REF_HEIGHT);
   rect->y1 = to_unit16(ay < by ? by : ay, REF_HEIGHT);
   rect->color = color;
+  rect->fill = false;
 }
 
 /* Cut the line va-vb (camera space) at the near plane. False if it's all behind it. */
@@ -409,41 +399,17 @@ static bool clip_to_picture(float *x0, float *y0, float *x1, float *y1)
   return true;
 }
 
-/* A line on the picture: near level or upright, a staircase of long rectangles; otherwise dots. */
+/* Overlap consecutive spans at the corners so steep edges stay connected. */
 static void add_line(aw_dot_t *out, int *n, float x0, float y0, float x1, float y1, uint8_t color, int limit)
 {
   float dx = x1 - x0, dy = y1 - y0;
-  float abs_dx = dx < 0 ? -dx : dx, abs_dy = dy < 0 ? -dy : dy;
-  bool level = abs_dx >= abs_dy;
-  float major = level ? abs_dx : abs_dy, minor = level ? abs_dy : abs_dx;
-  int pieces = (int)(minor / LINE_WIDTH) + 1;
-  if (minor <= major * STRAIGHT && pieces <= limit) {
-    /* Solid runs only if they fit the edge budget. Close-up edges otherwise
-     * use evenly spaced dots so one side cannot consume the rest of a volume. */
-    for (int i = 0; i < pieces && *n < MAX_DOTS; i++) {
-      float ta = (float)i / pieces, tb = (float)(i + 1) / pieces, t_mid = (ta + tb) / 2;
-      float ax, ay, bx, by;
-      if (level) {
-        ax = x0 + dx * ta;
-        bx = x0 + dx * tb;
-        ay = by = y0 + dy * t_mid;
-      } else {
-        ay = y0 + dy * ta;
-        by = y0 + dy * tb;
-        ax = bx = x0 + dx * t_mid;
-      }
-      add_rect(out, n, ax, ay, bx, by, color);
-    }
-    return;
-  }
-  int steps = (int)(major / DOT_SPACING);
-  if (steps >= limit)
-    steps = limit - 1;
-  for (int i = 0; i <= steps && *n < MAX_DOTS; i++) {
-    float t = steps ? (float)i / steps : 0;
-    float x = x0 + dx * t, y = y0 + dy * t;
-    add_rect(out, n, x, y, x, y, color);
-  }
+  float ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+  int pieces = (int)((ax < ay ? ax : ay) / LINE_WIDTH) + 1;
+  if (pieces > limit)
+    pieces = limit;
+  float sx = dx / pieces, sy = dy / pieces;
+  for (int i = 0; i < pieces && *n < MAX_DOTS; i++)
+    add_rect(out, n, x0 + sx*i, y0 + sy*i, x0 + sx*(i+1), y0 + sy*(i+1), color);
 }
 
 /* The edge a-b (camera space), clipped and projected into out[*n...]. */
@@ -568,27 +534,169 @@ static void add_world_cross(aw_dot_t *out, int *n, const view_cam_t *cam, const 
   }
 }
 
-static void draw_collision_mesh(aw_dot_t *out, int *n, const view_cam_t *cam, vec3f_t link,
-                                const mesh_edge_t *mesh, unsigned count, bool baked, int budget)
+#define PLANE_VERTICES 16
+typedef struct {
+  uint8_t count;
+  uint16_t radius;
+  int16_t centre[3], points[PLANE_VERTICES][3];
+} baked_plane_t;
+#include "baked_planes.inc"
+
+typedef struct { float x, y; } screen_point_t;
+
+/* Clip at the camera plane before projecting. Horizontal fill bands leave
+ * the original framebuffer visible between them without GPU readback. */
+static unsigned project_polygon(const view_cam_t *cam, const float p[][3], unsigned count,
+                                screen_point_t out[2 * PLANE_VERTICES])
 {
-  int limit = *n + budget;
-  if (limit > MAX_DOTS)
-    limit = MAX_DOTS;
-  for (unsigned i = 0; i < count && *n + 4 <= limit; i++) {
-    const mesh_edge_t *edge = &mesh[i];
-    if (edge->kind > 3 || (edge->kind == 3) != baked)
-      continue;
-    float a[3], b[3], va[3], vb[3];
-    for (int axis = 0; axis < 3; axis++) {
-      a[axis] = edge->a[axis] / 16.0f;
-      b[axis] = edge->b[axis] / 16.0f;
+  unsigned n = 0;
+  for (unsigned i = 0; i < count; i++) {
+    const float *a = p[(i + count - 1) % count], *b = p[i];
+    bool a_in = a[2] >= NEAR_PLANE, b_in = b[2] >= NEAR_PLANE;
+    if (a_in != b_in) {
+      float t = (NEAR_PLANE - a[2]) / (b[2] - a[2]);
+      float cut[3] = {a[0] + t*(b[0] - a[0]), a[1] + t*(b[1] - a[1]), NEAR_PLANE};
+      view_screen(cam, cut, &out[n].x, &out[n].y);
+      n++;
     }
-    if ((a[1] < link.y - 12 && b[1] < link.y - 12) ||
-        (a[1] > link.y + 12 && b[1] > link.y + 12))
+    if (b_in) {
+      view_screen(cam, b, &out[n].x, &out[n].y);
+      n++;
+    }
+  }
+  return n;
+}
+
+static float polygon_area(const screen_point_t *p, unsigned count)
+{
+  float area = 0;
+  for (unsigned i = 0; i < count; i++) {
+    unsigned j = (i + 1) % count;
+    area += p[i].x*p[j].y - p[j].x*p[i].y;
+  }
+  return area < 0 ? -area : area;
+}
+
+static void fill_polygon(aw_dot_t *out, int *n, const screen_point_t *p, unsigned count,
+                         uint8_t color, int budget)
+{
+  float lo = 1, hi = 0;
+  for (unsigned i = 0; i < count; i++) {
+    if (p[i].y < lo) lo = p[i].y;
+    if (p[i].y > hi) hi = p[i].y;
+  }
+  if (lo < 0) lo = 0;
+  if (hi > 1) hi = 1;
+  if (hi <= lo || budget <= 0)
+    return;
+  float step = (hi - lo) / budget;
+  if (step < 12.0f / REF_HEIGHT)
+    step = 12.0f / REF_HEIGHT;
+  int end = *n + budget;
+  for (float y = lo + step*.5f; y < hi && *n < end && *n < MAX_DOTS; y += step) {
+    float hits[2 * PLANE_VERTICES];
+    unsigned used = 0;
+    for (unsigned i = 0; i < count; i++) {
+      screen_point_t a = p[i], b = p[(i + 1) % count];
+      if ((a.y > y) == (b.y > y))
+        continue;
+      float x = a.x + (b.x-a.x)*(y-a.y)/(b.y-a.y);
+      unsigned j = used++;
+      while (j && hits[j-1] > x) {
+        hits[j] = hits[j-1];
+        j--;
+      }
+      hits[j] = x;
+    }
+    for (unsigned i = 0; i + 1 < used && *n < end && *n < MAX_DOTS; i += 2)
+      if (hits[i+1] > 0 && hits[i] < 1) {
+        add_rect(out, n, hits[i]*REF_WIDTH, y*REF_HEIGHT, hits[i+1]*REF_WIDTH, y*REF_HEIGHT, color);
+        out[*n-1].fill = true;
+      }
+  }
+}
+
+/* Fill only the most visible face of a box to avoid stacked bands. */
+static void fill_box(aw_dot_t *out, int *n, const view_cam_t *cam, const float p[][3], uint8_t color)
+{
+  static const uint8_t faces[6][4] = {
+    {0,2,6,4}, {1,3,7,5}, {0,1,5,4}, {2,3,7,6}, {0,1,3,2}, {4,5,7,6},
+  };
+  screen_point_t best[8];
+  unsigned best_n = 0;
+  float best_area = 0;
+  for (unsigned face = 0; face < 6; face++) {
+    float corners[4][3];
+    screen_point_t projected[2 * PLANE_VERTICES];
+    for (unsigned i = 0; i < 4; i++)
+      memcpy(corners[i], p[faces[face][i]], sizeof(corners[i]));
+    unsigned count = project_polygon(cam, corners, 4, projected);
+    float area = polygon_area(projected, count);
+    if (area > best_area) {
+      best_area = area;
+      best_n = count;
+      memcpy(best, projected, count * sizeof(*best));
+    }
+  }
+  if (best_n)
+    fill_polygon(out, n, best, best_n, color, 12);
+}
+
+static void draw_baked_planes(aw_dot_t *out, int *n, const view_cam_t *cam, int limit)
+{
+  const airmap_t *map = 0;
+  for (unsigned i = 0; i < sizeof(baked_maps) / sizeof(*baked_maps); i++)
+    if (str_equal(baked_maps[i].map, current_map_name)) {
+      map = &baked_maps[i];
+      break;
+    }
+  if (!map)
+    return;
+  /* Pick the closest visible faces first so a dense section cannot starve
+   * the boundary beside Link. */
+  int order[8], used = 0;
+  float distances[8];
+  float side_norm = sqrtf(1 + cam->tan_x*cam->tan_x);
+  float top_norm = sqrtf(1 + cam->tan_y*cam->tan_y);
+  for (int i = map->first; i < map->first + map->n; i++) {
+    const baked_plane_t *plane = &baked_planes[i];
+    float centre[3] = {plane->centre[0]/16.0f, plane->centre[1]/16.0f, plane->centre[2]/16.0f};
+    float radius = plane->radius/16.0f;
+    float x = centre[0] - cam->pos[0], y = centre[1] - cam->pos[1], z = centre[2] - cam->pos[2];
+    float range = AW_RANGE + radius;
+    if (x*x + y*y + z*z > range*range ||
+        sphere_outside_view(cam, centre, radius, side_norm, top_norm))
       continue;
-    view_point(cam, a, va);
-    view_point(cam, b, vb);
-    add_edge_dots(out, n, cam, va, vb, AW_MESH_FLOOR + edge->kind, 6);
+    float distance = sqrtf(x*x + y*y + z*z) - radius;
+    if (used == 8 && distance >= distances[7])
+      continue;
+    int j = used < 8 ? used++ : 7;
+    while (j && distance < distances[j-1]) {
+      order[j] = order[j-1];
+      distances[j] = distances[j-1];
+      j--;
+    }
+    order[j] = i;
+    distances[j] = distance;
+  }
+  for (int i = 0; i < used && *n < limit; i++) {
+    const baked_plane_t *plane = &baked_planes[order[i]];
+    int pieces = (limit - *n - 12) / plane->count;
+    if (pieces < 2)
+      break;
+    if (pieces > MAX_RECTS_PER_EDGE)
+      pieces = MAX_RECTS_PER_EDGE;
+    float v[PLANE_VERTICES][3];
+    for (unsigned j = 0; j < plane->count; j++) {
+      float p[3] = {plane->points[j][0]/16.0f, plane->points[j][1]/16.0f, plane->points[j][2]/16.0f};
+      view_point(cam, p, v[j]);
+    }
+    screen_point_t projected[2 * PLANE_VERTICES];
+    unsigned count = project_polygon(cam, v, plane->count, projected);
+    int fill = limit - *n - pieces * plane->count;
+    fill_polygon(out, n, projected, count, AW_BAKED_BARRIER, fill > 12 ? 12 : fill);
+    for (unsigned j = 0; j < plane->count; j++)
+      add_edge_dots(out, n, cam, v[j], v[(j+1) % plane->count], AW_BAKED_BARRIER, pieces);
   }
 }
 
@@ -602,7 +710,7 @@ void airwall_frame(bool menu_open)
   vec3f_t fall;
   bool show_fall = void_zones_shown && diagnostics_last_fall(current_map_name, &fall);
   bool draw_baked = airwalls_shown && baked_barriers_shown;
-  bool draw = ((enabled && (n_walls || show_fall)) || collision_mesh_shown || draw_baked) &&
+  bool draw = ((enabled && (n_walls || show_fall)) || draw_baked) &&
               !menu_open && !game_is_paused();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
@@ -611,12 +719,7 @@ void airwall_frame(bool menu_open)
       add_world_cross(dots[next], &n, &cam, point, AW_FALL_SAMPLE, 9);
     }
     /* nearest wall first, so the dot budget goes to what's close */
-    vec3f_t link = {0};
-    unsigned mesh_count = 0;
-    const mesh_edge_t *mesh = 0;
-    if ((collision_mesh_shown || draw_baked) && link_drawn_pos(&link))
-      mesh = collision_mesh_near(current_map_name, link, &mesh_count);
-    int volume_limit = mesh_count ? MAX_DOTS - 280 : MAX_DOTS;
+    int volume_limit = draw_baked ? MAX_DOTS - 280 : MAX_DOTS;
     int n_walls_near = sort_near_walls(&cam);
     for (int k = 0; k < n_walls_near && n < volume_limit; k++) {
       int i = near_order[k];
@@ -637,18 +740,20 @@ void airwall_frame(bool menu_open)
         budget = MAX_DOTS / 5;
       if (!geo->n_edges || budget < geo->n_edges)
         continue;
-      int limit = budget / geo->n_edges;
+      bool fill = k < 3 && geo->n_points == 8 && budget >= geo->n_edges * 4 + 12 &&
+                  data_airshapes[wall->first_shape].type == SHAPE_BOX;
+      int limit = (budget - (fill ? 12 : 0)) / geo->n_edges;
       if (limit > MAX_RECTS_PER_EDGE)
         limit = MAX_RECTS_PER_EDGE;
       for (int p = geo->first_point; p < geo->first_point + geo->n_points; p++)
         view_point(&cam, points[p], camera_points[p]);
+      if (fill)
+        fill_box(dots[next], &n, &cam, camera_points + geo->first_point, color);
       for (int e = geo->first_edge; n < MAX_DOTS && e < geo->first_edge + geo->n_edges; e++)
         add_edge_dots(dots[next], &n, &cam, camera_points[edges[e][0]], camera_points[edges[e][1]], color, limit);
     }
-    if (mesh_count && draw_baked)
-      draw_collision_mesh(dots[next], &n, &cam, link, mesh, mesh_count, true, collision_mesh_shown ? 140 : 280);
-    if (mesh_count && collision_mesh_shown)
-      draw_collision_mesh(dots[next], &n, &cam, link, mesh, mesh_count, false, 280);
+    if (draw_baked)
+      draw_baked_planes(dots[next], &n, &cam, MAX_DOTS);
   }
   n_dots[next] = n;
   __atomic_store_n(&published, n ? next : -1, __ATOMIC_RELEASE);

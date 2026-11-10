@@ -31,7 +31,6 @@ Navigate with the D-pad or left stick. **A** selects and **B** goes back.
 | Button | In the menu |
 |---|---|
 | **D-pad right + Plus** | Open or close the menu |
-| **D-pad left + B** | Toggle the mini-HUD during gameplay |
 | **D-pad up / down** | Move up and down the list |
 | **D-pad left / right** | Change a value (switches, numbers), or pick a button on a row of buttons |
 | **A** | Open a menu, tick a box or activate an action |
@@ -58,21 +57,11 @@ These work with the menu closed.
 | Shortcut | What it does |
 |---|---|
 | **D-pad right + Plus** | Open the menu |
-| **D-pad left + B** | Toggle the mini-HUD |
 | **D-pad right + A** | Start a new timer run or stop the current run |
 | **D-pad right + B** | Pause or resume the current timer run |
-| **D-pad right + Minus / X** | Hide or restore practice overlays |
-| **D-pad right + Y** | Toggle the experimental contact void-out bypass (1.1.1) |
-| **D-pad left + Minus** | Reset the timer |
-| **D-pad left + Plus** | Reset the lag counter |
-| **D-pad right + ZL** | Reset JS Height |
-| **D-pad left + X / Y** | Save / load position |
-| **D-pad right + R3** | Reset flight speed in hover, or toggle walking wall-pass |
-| **L3** | Levitate: start floating / drop (when it's turned on in settings) |
+| **D-pad right + Minus** | Hide or restore practice overlays |
+| **D-pad right + X** | Toggle the experimental contact void-out bypass (1.1.1) |
 | **X / B** (held, while floating) | Levitate up / down; release to hover |
-| **R3** (held, while floating) | Hold height even if X/B is held |
-| **L** (or **D-pad right**) | Frame advance: pause, then one frame per tap, frames continuously while held (on at first; **settings > frame advance**) |
-| **L + L3** (or **D-pad right + L3**) | Frame advance: let the game run again |
 
 Everything you do shows for a moment in the bottom-right corner (gz's log), for example `infinite magic on` or
 `warp to kokiri forest`.
@@ -113,23 +102,13 @@ to add it. Or open **debug > memory**, find the value, edit the row (**L**) and 
 **scene > collision > show**. Cyan walls stop Link; red ones are walls he's inside.
 
 **...float around?**
-Turn on **settings > levitate > enabled**, close the menu, press **L3**. Push the left stick to move; hold **X** to rise or **B** to descend. Release both to hover.
-With **through walls** enabled, Link can pass through walls and ceilings;
-held B commands descent through floors. Exit geometry before toggling floating off.
-**vertical speed** controls both directions; an old saved value of 0 uses 4 units/s for X/B.
-**L3** stops floating, restores collision and starts the fall with zero vertical speed. Normal
-gravity resumes, with fall-distance protection through the first landing. Void triggers still apply.
+Open **Cheats > Levitation & Ghost** and turn on **Enabled** and **Hover Active**.
+While hovering, use the left stick to move, hold **X** to rise or **B** to descend,
+and release both to hold altitude. Ghost mode and flight speed are set in the
+same menu. Turn off **Hover Active** to restore collision and drop.
 
-**...look at a trick frame by frame?**
-Frame advance is on from the start (**settings > frame advance > enabled**). In the game, tap **L** to pause, tap **L** for one frame or hold it
-to play slowly, and press **L + L3** to carry on. Buttons and stick directions you press while paused are given to
-the next frame.
-
-**...see my inputs on screen?**
-**settings > input display > show**. Choose **style: controller** for a picture of a Pro Controller.
-
-**...make the menu smaller?**
-**settings > size**: small, medium or large.
+Use **Debug Tools > Frame Advance** to pause gameplay, advance one frame, or
+resume. Open the menu with D-pad right + Plus even when gameplay is held.
 
 ## Things on the screen
 
@@ -153,8 +132,8 @@ the SD card in `sloperinaGZ/settings.ini`, plain text you can edit. Your game sa
 - **Nothing happens when I press D-pad right + Plus.** Check the sloperinaGZ splash showed at start-up. If not,
   sloperinaGZ needs the module and the IPS for the active game build. See [INSTALLATION.md](../INSTALLATION.md).
 - **The game doesn't react to a button.** Frame advance takes **L** (or **D-pad right**) away from the game while it's on,
-  levitate takes **L3**, plus **X/B/R3** while floating. Turn them off in **settings** if you need those buttons.
-- **The screen froze.** Frame advance may have paused the game: press **L + L3** (or **D-pad right + L3**).
+  hover uses **X/B** and the left stick while active.
+- **The screen froze.** Frame advance may have paused the game: open the practice menu and select **Debug Tools > Frame Advance > Resume Gameplay**.
 - **Something I ticked didn't change in the game.** Some things only show after the game redraws them: open and
   close the pause screen, or go through a loading zone. Story stages apply after a loading zone.
 - **"settings won't be kept".** The game couldn't open the SD card; everything works, it just won't remember your

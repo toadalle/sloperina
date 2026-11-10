@@ -1,7 +1,5 @@
-/* Hover: L3 toggles it, R3 toggles ghost collision while hovering, X/B rise/descend,
- * Y/A lower/raise flight speed one preset per press,
- * and release holds altitude. Left stick moves horizontally but is hidden from the
- * game's normal movement state machine while hover owns Link. */
+/* Hover is enabled through the menu. X/B move vertically and the left stick
+ * moves horizontally while hover owns Link. */
 #ifndef LEVITATE_H
 #define LEVITATE_H
 
@@ -19,6 +17,8 @@ extern bool levitate_ghost_default;
 extern int levitate_speed;        /* X/B units/s at preset 6; legacy 0 uses 4 */
 extern int levitate_move_speed;   /* horizontal units/s and vertical speed multiplier */
 
+bool levitate_hovering(void);
+void levitate_set_hover(bool on);
 void levitate_frame(bool menu_open, bool native_ui);
 const char *levitate_state(void); /* for watches/menus */
 

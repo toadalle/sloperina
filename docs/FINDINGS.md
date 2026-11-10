@@ -931,3 +931,10 @@ The v3 IPS patch adds a session switch for contact bit 19 at
 `main+0x82C610` on 1.1.1. It preserves the original branch when the
 switch is off, and preserves the selector's other mask bit and earlier
 branches when enabled. It leaves the physics geometry in place.
+
+With the v3 bypass enabled, two subsequent Kakariko falls occurred at
+(-36.815, 125.645, 133.976) and (-21.728, 132.648, 117.564). Their selector
+contact inputs were `0x3080000` and `0x3000000`. Both have bit 25 set;
+the second has bit 19 clear. The same native test at `main+0x82C60C`
+accepts either bit. Patch v4 bypasses that test's branch for both bits
+when enabled. The other selector branches retain vanilla behavior.

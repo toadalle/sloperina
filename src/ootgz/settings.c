@@ -21,7 +21,6 @@
 #include "watches.h"
 #include "levitate.h"
 #include "airwall.h"
-#include "collision_mesh.h"
 
 #include "sdfs.h"
 #include "lang.h"
@@ -64,9 +63,7 @@ typedef struct {
   uint8_t watch_hidden[W_COUNT];
   char watch_labels[W_COUNT][WATCH_LABEL_MAX + 1]; /* by watch_t; "" = its own name */
   char lang[8];
-  int32_t frame_advance;
   int32_t pause_display;
-  int32_t frame_advance_button;
   int32_t menu_scale;
   int32_t menu_pause_world;
   int32_t input_display;
@@ -85,7 +82,7 @@ typedef struct {
   int32_t levitate_move;
   int32_t levitate_reset_speed;
   int32_t levitate_walls;
-  int32_t loading_zones, void_zones, collision_mesh, baked_barriers;
+  int32_t loading_zones, void_zones, baked_barriers;
   int32_t airwalls_shown;
   int32_t airwalls_all;
   int32_t enemy_hp;
@@ -128,9 +125,7 @@ static snapshot_t take_snapshot(void)
   s.opacity = gfx_opacity;
   s.menu_scale = gfx_menu_scale;
   s.menu_pause_world = menu_pause_world;
-  s.frame_advance = frame_advance;
   s.pause_display = pause_display;
-  s.frame_advance_button = frame_advance_button;
   snprintf(s.lang, sizeof(s.lang), "%s", lang_code());
   s.input_display = input_display;
   s.input_display_bg = input_display_bg;
@@ -145,7 +140,6 @@ static snapshot_t take_snapshot(void)
   s.levitate_walls = levitate_ghost_default;
   s.loading_zones = loading_zones_shown;
   s.void_zones = void_zones_shown;
-  s.collision_mesh = collision_mesh_shown;
   s.baked_barriers = baked_barriers_shown;
   s.airwalls_shown = airwalls_shown;
   s.airwalls_all = airwalls_all;
@@ -186,9 +180,7 @@ static void apply_snapshot(const snapshot_t *s)
 
   if (!same_text(s->lang, lang_code()))
     lang_select_code(s->lang);
-  frame_advance = s->frame_advance != 0;
   pause_display = s->pause_display != 0;
-  frame_advance_button = s->frame_advance_button == 1;
 
   input_display = s->input_display != 0;
   input_display_bg = s->input_display_bg != 0;
@@ -214,7 +206,6 @@ static void apply_snapshot(const snapshot_t *s)
   levitate_ghost_default = s->levitate_walls != 0;
   loading_zones_shown = s->loading_zones != 0;
   void_zones_shown = s->void_zones != 0;
-  collision_mesh_shown = s->collision_mesh != 0;
   baked_barriers_shown = s->baked_barriers != 0;
   airwalls_shown = s->airwalls_shown != 0;
   airwalls_all = s->airwalls_all != 0;
@@ -275,9 +266,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("menu_size", menu_scale),
   INT_KEY("menu_pause_world", menu_pause_world),
   INT_KEY("practice_menu_pause", menu_pause_world), /* compatibility with the first test build */
-  INT_KEY("frame_advance", frame_advance),
   INT_KEY("pause_display", pause_display),
-  INT_KEY("frame_advance_button", frame_advance_button),
   INT_KEY("input_display", input_display),
   INT_KEY("input_display_background", input_display_bg),
   INT_KEY("input_display_style", input_style),
@@ -291,7 +280,6 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("levitate_through_walls", levitate_walls),
   INT_KEY("loading_zones", loading_zones),
   INT_KEY("void_zones", void_zones),
-  INT_KEY("collision_mesh", collision_mesh),
   INT_KEY("baked_barriers", baked_barriers),
   INT_KEY("airwalls_shown", airwalls_shown),
   INT_KEY("airwalls_all", airwalls_all),
@@ -468,13 +456,13 @@ static void save_settings_file(const snapshot_t *s)
                    (int)s->enemy_hp);
   if (n < (int)sizeof(buf))
     n += snprintf(buf + n, sizeof(buf) - n,
-                  "language=%s\nframe_advance=%d\nframe_advance_button=%d\npause_display=%d\nmenu_size=%d\n"
+                  "language=%s\npause_display=%d\nmenu_size=%d\n"
                   "menu_pause_world=%d\ninput_display=%d\ninput_display_background=%d\ninput_display_parts=%d\n"
-                  "input_display_style=%d\ninput_display_size=%d\nloading_zones=%d\nvoid_zones=%d\ncollision_mesh=%d\nbaked_barriers=%d\n",
-                  s->lang, (int)s->frame_advance, (int)s->frame_advance_button, (int)s->pause_display,
+                  "input_display_style=%d\ninput_display_size=%d\nloading_zones=%d\nvoid_zones=%d\nbaked_barriers=%d\n",
+                  s->lang, (int)s->pause_display,
                   (int)s->menu_scale, (int)s->menu_pause_world, (int)s->input_display, (int)s->input_display_bg,
                   (int)s->input_parts,
-                  (int)s->input_style, (int)s->input_size, (int)s->loading_zones, (int)s->void_zones, (int)s->collision_mesh, (int)s->baked_barriers);
+                  (int)s->input_style, (int)s->input_size, (int)s->loading_zones, (int)s->void_zones, (int)s->baked_barriers);
   for (int w = 0; w < W_COUNT && n < (int)sizeof(buf); w++)
     if (s->watch_labels[w][0])
       n += snprintf(buf + n, sizeof(buf) - n, WATCH_LABEL_KEY "%d=%s\n", w, s->watch_labels[w]);

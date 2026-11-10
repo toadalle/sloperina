@@ -7,7 +7,6 @@
 #include "data.h"
 #include "gamedata.h"
 #include "airwall.h"
-#include "collision_mesh.h"
 #include "diagnostics.h"
 #include "enemyhp.h"
 #include "memview.h"
@@ -393,10 +392,10 @@ static void build_link(void)
   menu_item_t *reload = menu_add_action(&m_link, "reload map", act_reload_map, 0);
   if (reload)
     reload->hint = "A: reload this map at the age above";
-  menu_item_t *save = menu_add_action(&m_link, "save position (D-left + X)", act_save_position, 0);
+  menu_item_t *save = menu_add_action(&m_link, "save position", act_save_position, 0);
   if (save)
     save->hint = "A: remember where Link is and which way he faces";
-  menu_item_t *load = menu_add_action(&m_link, "load position (D-left + Y)", act_load_position, 0);
+  menu_item_t *load = menu_add_action(&m_link, "load position", act_load_position, 0);
   if (load)
     load->hint = "A: put Link back there (same map only)";
   /* read-only status after a blank line */
@@ -1783,7 +1782,7 @@ static void fill_watches(void)
   menu_add_heading(&m_watches, "JS Height");
   menu_item_t *reset_js = menu_add_action(&m_watches, "Reset JS Height", act_js_height_reset, 0);
   if (reset_js)
-    reset_js->hint = "A: set the threshold to maximum once (also D-right + ZL)";
+    reset_js->hint = "A: set the threshold to maximum once";
   menu_item_t *lock_js = menu_add_check(&m_watches, "Lock JS Height", get_js_height_lock, set_js_height_lock, 0);
   if (lock_js)
     lock_js->hint = "Keep maximum height each frame; off after restarting";
@@ -1861,12 +1860,6 @@ static void text_air_wall_summary(menu_item_t *it, char *buf, int len)
   snprintf(buf, len, TF("count  %s"), summary);
 }
 
-static void text_mesh_status(menu_item_t *it, char *buf, int len)
-{
-  snprintf(buf, len, "%s", collision_mesh_available(gd_get_str(GD_STR_MAP)) ?
-           T("static mesh: bundled") : T("static mesh: unavailable for this map"));
-}
-
 static void text_nearest_death(menu_item_t *it, char *buf, int len)
 {
   airwall_nearest_death(buf, len);
@@ -1917,11 +1910,7 @@ static void build_scene(void)
                                       set_scene_volume, (intptr_t)&baked_barriers_shown);
   if (baked)
     baked->hint = "Cyan: invisible boundary geometry baked into the map";
-  menu_item_t *mesh = menu_add_check(&m_scene, "show static collision mesh", get_scene_volume,
-                                      set_scene_volume, (intptr_t)&collision_mesh_shown);
-  if (mesh)
-    mesh->hint = "Green floors, blue walls, pink ceilings (bundled maps only)";
-  menu_add_text(&m_scene, text_mesh_status, 0);
+  menu_add_text(&m_scene, text_static, (intptr_t)"static collision mesh (planned)");
   menu_add_text(&m_scene, text_air_wall_summary, 0);
   menu_add_text(&m_scene, text_nearest_death, 0);
   menu_add_text(&m_scene, text_last_fall, 0);
@@ -2124,58 +2113,22 @@ static void text_levitate(menu_item_t *it, char *buf, int len)
   snprintf(buf, len, TF("status  %s"), levitate_state());
 }
 
-/* frame advance */
-static const char *const fa_button_names[] = { "L", "D-pad right" };
-
-static bool get_fa(menu_item_t *it)
+/* Frame advance has no gameplay binding. */
+static void act_frame_advance(menu_item_t *it)
 {
-  return frame_advance;
+  frame_advance_set(it->data != 0, it->data == 2);
 }
 
-static void set_fa(menu_item_t *it, bool on)
-{
-  frame_advance = on;
-}
-
-static bool get_pause_display(menu_item_t *it)
-{
-  return pause_display;
-}
-
-static void set_pause_display(menu_item_t *it, bool on)
-{
-  pause_display = on;
-}
-
-static int get_fa_button(menu_item_t *it)
-{
-  return frame_advance_button;
-}
-
-static void set_fa_button(menu_item_t *it, int button)
-{
-  frame_advance_button = button;
-}
+static bool get_pause_display(menu_item_t *it) { return pause_display; }
+static void set_pause_display(menu_item_t *it, bool on) { pause_display = on; }
 
 static void build_frame_advance(void)
 {
-  menu_init(&m_frame_advance, "frame advance", 5);
-  menu_add_heading(&m_frame_advance, "frame advance options");
-  menu_item_t *enabled = menu_add_check(&m_frame_advance, "enabled", get_fa, set_fa, 0);
-  if (enabled) {
-    enabled->hint = "in game, tap the button: pause; tap: a frame; button + L3: run";
-    enabled->log_label = "frame advance";
-  }
-  menu_item_t *pause_icon = menu_add_check(&m_frame_advance, "pause icon", get_pause_display, set_pause_display, 0);
-  if (pause_icon)
-    pause_icon->hint = "gz's pause display at the top left while paused";
-  menu_item_t *button = menu_add_option(&m_frame_advance, "button", ARRAY_LEN(fa_button_names), fa_button_names,
-                                        get_fa_button, set_fa_button, 0);
-  if (button) {
-    button->hint = "the button for frame advance (the game no longer sees it while it's on)";
-    button->log_label = "frame advance button";
-  }
-  menu_end_group(&m_frame_advance);
+  menu_init(&m_frame_advance, "frame advance", 4);
+  menu_add_action(&m_frame_advance, "pause gameplay", act_frame_advance, 1);
+  menu_add_action(&m_frame_advance, "advance one frame", act_frame_advance, 2);
+  menu_add_action(&m_frame_advance, "resume gameplay", act_frame_advance, 0);
+  menu_add_check(&m_frame_advance, "pause icon", get_pause_display, set_pause_display, 0);
 }
 
 static void build_input_display(void)
@@ -2208,16 +2161,23 @@ static void build_input_display(void)
   menu_end_group(&m_input_display);
 }
 
+static bool get_hover_active(menu_item_t *it) { return levitate_hovering(); }
+static void set_hover_active(menu_item_t *it, bool on) { levitate_set_hover(on); }
+static bool get_ghost_active(menu_item_t *it) { return levitate_through_walls; }
+static void set_ghost_active(menu_item_t *it, bool on) { levitate_through_walls = on; }
+
 static void build_levitate(void)
 {
-  menu_init(&m_levitate, "levitate", 9);
+  menu_init(&m_levitate, "levitate", 11);
   menu_add_heading(&m_levitate, "levitation options");
   menu_item_t *lv = menu_add_check(&m_levitate, "enabled", get_levitate, set_levitate, 0);
   if (lv)
-    lv->hint = "L3: hover   R3: ghost   X/B: height   Y/A: slower/faster", lv->log_label = "levitate";
+    lv->hint = "Enable the Hover Active checkbox to fly. X/B move up/down", lv->log_label = "levitate";
+  menu_add_check(&m_levitate, "hover active", get_hover_active, set_hover_active, 0);
+  menu_add_check(&m_levitate, "ghost while hovering", get_ghost_active, set_ghost_active, 0);
   menu_item_t *walls = menu_add_check(&m_levitate, "start hover in ghost mode", get_walls, set_walls, 0);
   if (walls)
-    walls->hint = "Applies each time L3 starts hover. R3 toggles the current session";
+    walls->hint = "Applies when starting hover. Ghost While Hovering controls the current session";
   menu_item_t *rise = menu_add_option(&m_levitate, "base rise speed", 7, lev_speed_names, get_lev_speed, set_lev_speed, 0);
   if (rise)
     rise->hint = "X/B speed at flight preset 6. Legacy 0 uses 4";
@@ -2265,21 +2225,21 @@ static void build_settings(void)
   menu_item_t *reset_speed = menu_add_check(&m_settings_gameplay, "reset flight speed on hover toggle",
                                              get_reset_flight_speed, set_reset_flight_speed, 0);
   if (reset_speed)
-    reset_speed->hint = "Start each L3 hover at 6. Off keeps the last flight speed";
+    reset_speed->hint = "Reset flight speed to 6 on hover start and stop. Off keeps the last flight speed";
 
   menu_item_t *mini_hud = menu_add_check(&m_settings_display, "show gameplay mini-HUD", get_shown,
                                           set_shown, 0);
   if (mini_hud)
-    mini_hud->hint = "Show the Sloperina watch panel during gameplay. D-left + B toggles it";
+    mini_hud->hint = "Show the Sloperina watch panel during gameplay";
   menu_item_t *hide = menu_add_check(&m_settings_display, "hide practice overlays",
                                     get_overlay_hidden, set_overlay_hidden, 0);
   if (hide)
-    hide->hint = "D-right + Minus or X. The practice menu stays available";
+    hide->hint = "D-right + Minus. The practice menu stays available";
   if (void_bypass_available()) {
     menu_item_t *bypass = menu_add_check(&m_settings_gameplay, "bypass contact void-outs",
                                         get_void_bypass, set_void_bypass, 0);
     if (bypass)
-      bypass->hint = "D-right + Y. Experimental. Resets at game launch";
+      bypass->hint = "D-right + X. Experimental. Resets at game launch";
   }
 
   /* Built here because their settings are persisted; linked from functional categories below. */

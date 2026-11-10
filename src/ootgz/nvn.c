@@ -1197,10 +1197,7 @@ static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_VOID] = { 1.0f, 0.26f, 0.22f, 1.0f },
   [AW_GROTTO_SAFETY] = { 0.79f, 0.48f, 1.0f, 1.0f },
   [AW_FALL_SAMPLE] = { 1.0f, 0.50f, 0.15f, 1.0f },
-  [AW_MESH_FLOOR] = { 0.28f, 0.83f, 0.37f, 1.0f },
-  [AW_MESH_WALL] = { 0.22f, 0.62f, 0.98f, 1.0f },
   [AW_BAKED_BARRIER] = { 0.38f, 0.88f, 1.0f, 1.0f },
-  [AW_MESH_CEILING] = { 0.94f, 0.34f, 0.72f, 1.0f },
 };
 
 /* enemy health (enemyhp.c) */
@@ -1228,13 +1225,14 @@ static void draw_rects(const aw_dot_t *dots, int n, const float (*colours)[4], i
     int y1 = (int)((int64_t)dot->y1 * area.h / DOT_COORD_MAX);
     int w = x1 - x;
     int h = y1 - y;
-    if (w < size) {
-      x = (x + x1 - size) / 2;
-      w = size;
+    int thickness = dot->fill ? 1 : size;
+    if (w < thickness) {
+      x = (x + x1 - thickness) / 2;
+      w = thickness;
     }
-    if (h < size) {
-      y = (y + y1 - size) / 2;
-      h = size;
+    if (h < thickness) {
+      y = (y + y1 - thickness) / 2;
+      h = thickness;
     }
     /* kept inside the visible area */
     x = x < 0 ? 0 : x + w > area.w ? area.w - w : x;

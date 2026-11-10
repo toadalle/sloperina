@@ -65,7 +65,7 @@ FORCE:
 $(OBJDIR)/%.o: $(SRCDIR)/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -I$(OBJDIR) -c $< -o $@
 $(OBJDIR)/menus.o: $(OBJDIR)/build_info.h
-$(OBJDIR)/mesh_assets.o: $(wildcard data/mesh/*.mesh)
+$(OBJDIR)/airwall.o: $(SRCDIR)/baked_planes.inc
 $(OBJDIR)/%.o: $(SRCDIR)/%.S | $(OBJDIR)
 	$(CC) $(ASFLAGS) -c $< -o $@
 $(BINDIR)/ootgz.elf: $(patsubst $(SRCDIR)/%,$(OBJDIR)/%.o,$(basename $(SSRC) $(CSRC))) $(LDSCRIPT) | $(BINDIR)

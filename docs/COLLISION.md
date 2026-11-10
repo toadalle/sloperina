@@ -1,24 +1,16 @@
 # Collision view
 
-**Show Static Collision Mesh** under **Scene > Collision** draws baked player collision
-near Link. Green edges mark floors, blue edges mark walls and pink edges mark
-ceilings. Placed loading zones and invisible barrier shapes retain their
-separate overlay toggles. The orange cross marks a recorded fall position.
+Scene > Collision lists the placed loading zones, void triggers and invisible
+barriers. Nearby surfaces use continuous stepped borders. Box faces and authored
+baked boundary planes can also show sparse interior bands that leave the scene
+visible between them. The orange cross marks a recorded fall position.
 
-The mesh files in the test build cover the village and forest playable areas
-in both ages, Dodongo's Cavern, Forest Temple and Inside the Deku Tree.
-The module embeds the indexes and reads edges from the current and neighboring
-8 m cells in memory. The renderer gives placed outlines and nearby mesh edges
-separate portions of its fixed draw budget. The mesh shows through scenery
-and represents static geometry. Cyan edges under Include Baked Boundary Walls
-come from collision tagged AirWall in the static tiles. Lavender outlines
-represent special-purpose placed actors.
+Include Baked Boundary Walls shows cyan perimeters derived from player-facing
+AirWall collision. The exporter merges shared edges on coplanar faces. It
+excludes small or ambiguous perimeters. Lavender outlines represent
+special-purpose placed actors. The full static collision mesh is a placeholder.
 
-Run `python tools/collision_mesh.py <Area> <Map>` with `OOTMENU_NUP` set to
-generate another map. Use `--bounds X0 Z0 X1 Z1` to limit the export to the
-playable area on large maps. Register the new SGM1 file in `mesh_assets.S`
-and the asset table in `collision_mesh.c` when building the module. The development notes below describe the original
-plan and the underlying collision decoder.
+The notes below describe the collision decoder and the original mesh research.
 
 ## Contents
 

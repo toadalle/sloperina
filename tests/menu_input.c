@@ -50,21 +50,21 @@ int main(void)
   assert(sample.buttons == (BTN_A | BTN_B)); /* preserve dialogue controls */
   input_set_native_ui(false);
   input_hide_from_game = 0;
-  raw.sampling_number++;
-  raw.buttons = BTN_DLEFT;
-  input_update();
-  assert(!input_shortcut(MINI_HUD_COMBO));
-  raw.buttons = MINI_HUD_COMBO;
-  input_update();
-  assert(input_shortcut(MINI_HUD_COMBO));
-  sample = raw;
-  filter_game_states(&sample, 1, 0, NPAD_NO1);
-  assert(!sample.buttons);
-
+  const uint32_t removed[] = {
+    BTN_DLEFT | BTN_B, BTN_DLEFT | BTN_X, BTN_DLEFT | BTN_Y, BTN_DLEFT | BTN_PLUS,
+    BTN_DLEFT | BTN_MINUS, BTN_DRIGHT | BTN_Y, BTN_DRIGHT | BTN_RSTICK, BTN_DRIGHT | BTN_ZL,
+    BTN_L, BTN_LSTICK, BTN_RSTICK,
+  };
+  for (unsigned i = 0; i < sizeof(removed) / sizeof(*removed); i++) {
+    raw.buttons = removed[i];
+    input_update();
+    assert(!input_shortcut_held());
+    sample = raw;
+    filter_game_states(&sample, 1, 0, NPAD_NO1);
+    assert(sample.buttons == removed[i]);
+  }
   const uint32_t shortcuts[] = {
-    PRACTICE_MENU_COMBO, MINI_HUD_COMBO, OVERLAY_TOGGLE_COMBO, OVERLAY_TOGGLE_ALT,
-    VOID_BYPASS_COMBO, SAVE_POSITION_COMBO, LOAD_POSITION_COMBO, HOVER_ACTION_COMBO,
-    TIMER_TOGGLE_COMBO, TIMER_PAUSE_COMBO, TIMER_RESET_COMBO, LAG_RESET_COMBO, JS_RESET_COMBO,
+    PRACTICE_MENU_COMBO, OVERLAY_TOGGLE_COMBO, VOID_BYPASS_COMBO, TIMER_TOGGLE_COMBO, TIMER_PAUSE_COMBO,
   };
   for (unsigned i = 0; i < sizeof(shortcuts) / sizeof(*shortcuts); i++) {
     raw.buttons = 0;
@@ -77,6 +77,15 @@ int main(void)
     filter_game_states(&sample, 1, 0, NPAD_NO1);
     assert(sample.buttons == BTN_ZR);
   }
+
+  raw.buttons = VOID_BYPASS_COMBO;
+  input_update();
+  input_suppress_until_release(VOID_BYPASS_COMBO);
+  raw.buttons = BTN_X;
+  input_update();
+  assert(!input_gameplay_held()); /* release D-right first without starting ascent */
+  raw.buttons = 0;
+  input_update();
 
   input_set_menu_block(true);
   raw.sampling_number++;
@@ -105,7 +114,7 @@ int main(void)
   history[0] = raw;
   history[0].buttons = BTN_PLUS;
   history[0].lx = -20000;
-  history[1].sampling_number = 12;
+  history[1].sampling_number = raw.sampling_number - 2;
   history[1].buttons = BTN_B;
   filter_game_states(history, 2, 0, NPAD_NO1);
   assert(history[0].buttons == BTN_PLUS && history[0].lx == -20000);
