@@ -844,22 +844,20 @@ static void build_palette(uint8_t pal[PAL_COUNT][3])
   memcpy(pal[PAL_CARD], card_colours, sizeof(card_colours));
 }
 
-/* The dashboard is composited in one opaque panel, with no GPU readback. */
 static uint8_t dashboard_background(const gfx_panel_t *panel, int x, int y)
 {
   int card_x = x - (GFX_CARD_COL + 1) * FONT_W;
   int card_y = y - (TEXT_TOP + GFX_CARD_ROW * CELL_H);
   if (card_x < 0 || card_y < 0)
     return 0;
-  int col = card_x / (GFX_CARD_PITCH_X * FONT_W);
   int row = card_y / (GFX_CARD_PITCH_Y * CELL_H);
-  int inside_x = card_x % (GFX_CARD_PITCH_X * FONT_W);
+  int inside_x = card_x;
   int inside_y = card_y % (GFX_CARD_PITCH_Y * CELL_H);
   int width = GFX_CARD_WIDTH * FONT_W;
-  int height = GFX_CARD_PITCH_Y * CELL_H - 2;
-  if (col >= 2 || row >= 4 || inside_x >= width || inside_y >= height)
+  int height = GFX_CARD_PITCH_Y * CELL_H - 1;
+  if (row >= 8 || inside_x >= width || inside_y >= height)
     return 0;
-  bool selected = panel->dashboard == 1 + row * 2 + col;
+  bool selected = panel->dashboard == 1 + row;
   if ((inside_x == 0 || inside_x == width - 1) && (inside_y == 0 || inside_y == height - 1))
     return 0; /* clipped corners */
   if (inside_x == 0 || inside_x == width - 1 || inside_y == 0 || inside_y == height - 1)
@@ -884,17 +882,23 @@ static uint8_t menu_row_background(const gfx_panel_t *panel, int x, int y)
 #define MAX_PANEL_W PANEL_W(GFX_COLS, MAX_SCALE * SC_ONE)
 static _Alignas(16) uint8_t row_buffer[MAX_PANEL_W * MAX_BYTES_PER_PIXEL];
 static int screen_to_font_x[MAX_PANEL_W];
+static const uint32_t *frozen_row(int x, int y);
+static inline uint32_t blend_rgba8(uint32_t over, uint32_t under, unsigned alpha);
 
-static void rasterise(const gfx_panel_t *panel, uint8_t *dst, int scale, int w, int h)
+static void rasterise(const gfx_panel_t *panel, uint8_t *dst, int scale, const nvn_region_t *region,
+                      bool frozen, int opacity)
 {
+  int w = region->w, h = region->h;
   uint8_t pal[PAL_COUNT][3];
   uint64_t encoded[PAL_COUNT];
   build_palette(pal);
   for (int i = 0; i < PAL_COUNT; i++)
     encoded[i] = encode_pixel(pal[i]);
   for (int y = 0; y < h; y++) {
+    const uint32_t *under = frozen ? frozen_row(region->x, region->y + y) : 0;
     for (int x = 0; x < w; x++) {
       uint8_t pixel = panel_pixel(panel, x, y, scale);
+      bool text = pixel != 0;
       if (!pixel && panel->fullscreen) {
         int fx = x * SC_ONE / scale, fy = y * SC_ONE / scale;
         pixel = panel->dashboard ? dashboard_background(panel, fx, fy) : menu_row_background(panel, fx, fy);
@@ -903,7 +907,7 @@ static void rasterise(const gfx_panel_t *panel, uint8_t *dst, int scale, int w, 
         int fx = x * SC_ONE / scale;
         int fy = y * SC_ONE / scale - TEXT_TOP;
         if (fx < 2 || y == 0)
-          pixel = PAL_CARD_BORDER;
+          pixel = PAL_CARD_ACCENT;
         else if (fy >= 0 && fy / CELL_H < panel->rows && (fy / CELL_H & 1))
           pixel = PAL_CARD;
       }
@@ -912,6 +916,12 @@ static void rasterise(const gfx_panel_t *panel, uint8_t *dst, int scale, int w, 
         memcpy(row_buffer + x * 8, &colour, 8);
       } else {
         uint32_t colour32 = (uint32_t)colour;
+        if (under && !text && pixel != PAL_CARD_ACCENT && pixel != PAL_CARD_BORDER) {
+          int alpha = opacity;
+          if (pixel == PAL_CARD || pixel == PAL_CARD_SELECTED)
+            alpha += (100 - alpha) / (pixel == PAL_CARD_SELECTED ? 2 : 4);
+          colour32 = blend_rgba8(colour32, under[x], (unsigned)alpha * 255 / 100);
+        }
         memcpy(row_buffer + x * 4, &colour32, 4);
       }
     }
@@ -1185,6 +1195,7 @@ static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_OTHER] = { 0.52f, 0.72f, 0.94f, 1.0f },  /* lighter blue: other barriers */
   [AW_LOADING] = { 1.0f, 0.86f, 0.23f, 1.0f },
   [AW_VOID] = { 1.0f, 0.26f, 0.22f, 1.0f },
+  [AW_GROTTO_SAFETY] = { 0.79f, 0.48f, 1.0f, 1.0f },
 };
 
 /* enemy health (enemyhp.c) */
@@ -1363,10 +1374,7 @@ static void place_panel(int p, const gfx_panel_t *panel, const frame_t *frame, i
   int x = margin;
   int y = margin;
   if (p == PANEL_MENU) {
-    if (panel->fullscreen) {
-      x = (area.w - w) / 2;
-      y = (area.h - h) / 2;
-    } else {
+    if (!panel->fullscreen) {
       x = area.w * MENU_X_PERMILLE / 1000;
       y = frame->menu_y;
     }
@@ -1467,14 +1475,17 @@ static bool plan_see_through_panel(panel_draw_t *draw, int p, const gfx_panel_t 
 }
 
 /* An opaque panel: rasterised into its buffer when it's changed. false: the GPU hung (give up). */
-static bool plan_opaque_panel(panel_draw_t *draw, int p, const gfx_panel_t *panel, int slot, int w, int h, int scale)
+static bool plan_buffered_panel(panel_draw_t *draw, int p, const gfx_panel_t *panel, int slot, int scale,
+                                uint32_t backdrop, int opacity)
 {
   int b = buffers_per_panel[p] > 1 ? slot : 0;
-  if (drawn_hash[p][b] != panel->hash || drawn_w[p][b] != w || drawn_h[p][b] != h) {
+  int w = draw->region.w, h = draw->region.h;
+  uint32_t hash = backdrop ? panel->hash ^ (backdrop * 16777619u + (unsigned)opacity) : panel->hash;
+  if (drawn_hash[p][b] != hash || drawn_w[p][b] != w || drawn_h[p][b] != h) {
     if (buffers_per_panel[p] == 1 && !wait_gpu_idle()) /* the GPU may still be copying the old one */
       return false;
-    rasterise(panel, panel_buffer_ptr(p, b), scale, w, h);
-    drawn_hash[p][b] = panel->hash;
+    rasterise(panel, panel_buffer_ptr(p, b), scale, &draw->region, backdrop != 0, opacity);
+    drawn_hash[p][b] = hash;
     drawn_w[p][b] = w;
     drawn_h[p][b] = h;
   }
@@ -1497,9 +1508,10 @@ static void record_readback(nvn_texture_t *tex, const panel_draw_t *draw)
 
 /* Keep one GPU-only copy of the visible game image, before any mod overlays.
  * Present must continue so the practice menu can redraw on top of it. */
-#define FREEZE_STRIPS 4
+#define FREEZE_STRIPS 16
 #define FREEZE_BYTES_MAX (32u * 1024 * 1024)
 static nvn_obj_t freeze_pool[FREEZE_STRIPS];
+static uint8_t *freeze_mem[FREEZE_STRIPS];
 static size_t freeze_capacity[FREEZE_STRIPS];
 static bool freeze_storage_failed;
 static nvn_queue_t *freeze_queue;
@@ -1507,6 +1519,14 @@ static nvn_region_t freeze_region;
 static uint32_t captured_token;
 static int capture_slot;
 static bool capture_complete;
+
+static const uint32_t *frozen_row(int x, int y)
+{
+  int row = y - freeze_region.y;
+  int strip = ((row + 1) * FREEZE_STRIPS - 1) / freeze_region.h;
+  int local_y = row - freeze_region.h * strip / FREEZE_STRIPS;
+  return (const uint32_t *)freeze_mem[strip] + (size_t)local_y * freeze_region.w + x - freeze_region.x;
+}
 
 static void freeze_fail(uint32_t token, const char *reason)
 {
@@ -1530,6 +1550,9 @@ static bool freeze_prepare(uint32_t token, nvn_queue_t *queue, nvn_rect_t area)
         return false;
       }
       capture_complete = true;
+      if (is_rgba8(swapchain_format))
+        for (unsigned i = 0; i < FREEZE_STRIPS; i++)
+          fn.pool_invalidate(&freeze_pool[i], 0, freeze_capacity[i]);
       __atomic_store_n(&gfx_freeze_ready, token, __ATOMIC_RELEASE);
     }
     return true;
@@ -1549,13 +1572,14 @@ static bool freeze_prepare(uint32_t token, nvn_queue_t *queue, nvn_rect_t area)
   for (unsigned i = 0; i < FREEZE_STRIPS; i++) {
     if (!freeze_capacity[i]) {
       void *mem = aligned_alloc(PAGE_SIZE, strip_size);
-      if (!mem || !make_pool(&freeze_pool[i], mem, strip_size, POOL_CPU_UNCACHED | POOL_GPU_UNCACHED)) {
+      if (!mem || !make_pool(&freeze_pool[i], mem, strip_size, POOL_CPU_CACHED | POOL_GPU_UNCACHED)) {
         if (mem)
           free(mem);
         freeze_storage_failed = true;
         freeze_fail(token, mem ? "NVN rejected capture strip storage" : "capture strip allocation failed");
         return false;
       }
+      freeze_mem[i] = mem;
       freeze_capacity[i] = strip_size;
     }
     if (strip_size > freeze_capacity[i]) {
@@ -1656,10 +1680,8 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
       continue;
     int cols = panel->cols > MIN_PANEL_COLS ? panel->cols : MIN_PANEL_COLS;
     int rows = panel->rows;
-    if (p == PANEL_MENU && panel->fullscreen) {
-      cols = panel_max_cols[p];
-      rows = panel_max_rows[p];
-    }
+    if (p == PANEL_MENU && panel->dashboard && cols < GFX_CARD_COL + GFX_CARD_WIDTH)
+      cols = GFX_CARD_COL + GFX_CARD_WIDTH;
     if (cols > panel_max_cols[p])
       cols = panel_max_cols[p];
     if (rows > panel_max_rows[p])
@@ -1706,7 +1728,9 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
       nvn_rect_t placed = { x, y, w, h };
       if (!plan_see_through_panel(draw, p, panel, cols, rows, placed, scale, &frame))
         continue;
-    } else if (!plan_opaque_panel(draw, p, panel, frame.slot, w, h, scale)) {
+    } else if (!plan_buffered_panel(draw, p, panel, frame.slot, scale,
+                                    p == PANEL_MENU && freeze && capture_complete && is_rgba8(swapchain_format)
+                                      ? token : 0, frame.opacity)) {
       return;
     }
     draw->scale = scale;

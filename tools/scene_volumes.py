@@ -17,11 +17,25 @@ import phive
 from pathlib import Path
 
 OUT = Path(__file__).resolve().parents[1] / "data/scene_volumes.json"
-LOAD_LOGIC = "Common_FieldDungeonEntranceSet_bad1.logic.module.ain"
+LOAD_LOGIC = {"Common_FieldDungeonEntranceSet_bad1", "CrumblingGanonCastle_FieldDungeonEntranceSet_fe55"}
 VOID_LOGIC = {
-    "Gimmick_AreaContact_FallDown_0a27.logic.module.ain",
-    "Gimmick_AreaContact_FallDownMountian_3b16.logic.module.ain",
-    "Gimmick_AreaContact_FallDown_GanonCastle_b627.logic.module.ain",
+    "Gimmick_AreaContact_FallDown_0a27": "Area_ed22",
+    "Gimmick_AreaContact_FallDownMountian_3b16": "Area_b464",
+    "Gimmick_AreaContact_FallDown_GanonCastle_b627": "Area_94e1",
+    "CrumblingGanonCastle_Prefab_633f": "Area_94e1",
+}
+GROTTO_LOGIC = {
+    "Gimmick_Ocarina_Appearance_01_Common_2983": "Area_826a",
+    "Gimmick_Ocarina_Appearance_01_7e8b": "Area_de0b",
+    "Graveyard_Common_b972": "Area_826a",
+    "Graveyard_TombStone_Move02_Dampe_Prefab_203c": "Area_826a",
+    **{f"HidingHole_Level_Hole_{name}": "Area_826a" for name in (
+        "02_Prefab_4afa", "04_Prefab_75dd", "06_Prefab_ff0a", "07_Prefab_045d",
+        "08_Prefab_9d94", "09_Prefab_3984", "18_Prefab_9626", "19_Prefab_cbcd",
+        "20_Prefab_07c3", "30_Prefab_281d",
+    )},
+    "HidingHole_Level_Hole_03_Prefab_026b": "Area_de0b",
+    "HidingHole_Level_Hole_05_Prefab_af38": "Area_de0b",
 }
 BUILD = bytes.fromhex("E0F3CCFAF50065AE4EA01EB5AEB13B1A45DA3348")
 
@@ -29,16 +43,29 @@ BUILD = bytes.fromhex("E0F3CCFAF50065AE4EA01EB5AEB13B1A45DA3348")
 def logic_areas(paths):
     documents = [byml.load(gamefiles.read(path)) for path in paths]
     actors = {a["Hash"]: a for doc in documents for a in doc.get("Actors", [])}
+    shafts = [a["Translate"] for a in actors.values()
+              if a.get("Gyaml", "").startswith("Land_HidingHole_Base_") and a.get("Translate")]
     areas = {}
     for doc in documents:
         for group in doc.get("AiGroups", []):
-            logic = group.get("Logic", "").rsplit("/", 1)[-1]
-            if logic != LOAD_LOGIC and logic not in VOID_LOGIC:
+            logic = group.get("Logic", "").rsplit("/", 1)[-1].removesuffix(".logic.module.ain")
+            if logic not in LOAD_LOGIC and logic not in VOID_LOGIC and logic not in GROTTO_LOGIC:
                 continue
             for ref in group.get("References", []):
                 actor = actors.get(ref["Reference"])
-                if actor and actor.get("Gyaml") == "Area" and actor.get("Translate"):
-                    areas[actor["Hash"]] = ("loading" if logic == LOAD_LOGIC else "void", actor)
+                if not actor or actor.get("Gyaml") != "Area" or not actor.get("Translate"):
+                    continue
+                area_id = VOID_LOGIC.get(logic) or GROTTO_LOGIC.get(logic)
+                if area_id and ref.get("Id") != area_id:
+                    continue
+                kind = "void" if logic in VOID_LOGIC else "loading"
+                x, y, z = actor["Translate"]
+                # The shaft's thin, separate abyss sensor is a safety net below
+                # the actual entrance. Both have distinct in-game callbacks.
+                if kind == "void" and any(math.hypot(x - sx, z - sz) <= .5 and abs(y - sy) <= 1
+                                          for sx, sy, sz in shafts):
+                    kind = "grotto_safety"
+                areas[actor["Hash"]] = (kind, actor)
     return areas
 
 
@@ -137,7 +164,7 @@ def main():
         discovered.update(kind for kind, _ in areas.values())
         volumes = []
         seen = set()
-        for tile in sorted(tiles[name]):
+        for tile in sorted(tiles[name]) if areas else ():
             for actor_hash, box in tile_boxes(gamefiles.read(tile), areas):
                 if actor_hash in seen:
                     continue

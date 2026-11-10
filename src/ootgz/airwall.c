@@ -76,7 +76,8 @@ static bool wall_shown(const airwall_t *wall)
     case VOLUME_BLOCKER: return airwalls_shown;
     case VOLUME_OTHER_WALL: return airwalls_shown && airwalls_all;
     case VOLUME_LOADING: return loading_zones_shown;
-    case VOLUME_VOID: return void_zones_shown;
+    case VOLUME_VOID:
+    case VOLUME_GROTTO_SAFETY: return void_zones_shown;
     default: return false;
   }
 }
@@ -407,14 +408,14 @@ static bool clip_to_picture(float *x0, float *y0, float *x1, float *y1)
 }
 
 /* A line on the picture: near level or upright, a staircase of long rectangles; otherwise dots. */
-static void add_line(aw_dot_t *out, int *n, float x0, float y0, float x1, float y1, uint8_t color)
+static void add_line(aw_dot_t *out, int *n, float x0, float y0, float x1, float y1, uint8_t color, int limit)
 {
   float dx = x1 - x0, dy = y1 - y0;
   float abs_dx = dx < 0 ? -dx : dx, abs_dy = dy < 0 ? -dy : dy;
   bool level = abs_dx >= abs_dy;
   float major = level ? abs_dx : abs_dy, minor = level ? abs_dy : abs_dx;
   int pieces = (int)(minor / LINE_WIDTH) + 1;
-  if (minor <= major * STRAIGHT && pieces <= MAX_RECTS_PER_EDGE) {
+  if (minor <= major * STRAIGHT && pieces <= limit) {
     /* Solid runs only if they fit the edge budget. Close-up edges otherwise
      * use evenly spaced dots so one side cannot consume the rest of a volume. */
     for (int i = 0; i < pieces && *n < MAX_DOTS; i++) {
@@ -434,8 +435,8 @@ static void add_line(aw_dot_t *out, int *n, float x0, float y0, float x1, float 
     return;
   }
   int steps = (int)(major / DOT_SPACING);
-  if (steps >= MAX_RECTS_PER_EDGE)
-    steps = MAX_RECTS_PER_EDGE - 1;
+  if (steps >= limit)
+    steps = limit - 1;
   for (int i = 0; i <= steps && *n < MAX_DOTS; i++) {
     float t = steps ? (float)i / steps : 0;
     float x = x0 + dx * t, y = y0 + dy * t;
@@ -444,7 +445,8 @@ static void add_line(aw_dot_t *out, int *n, float x0, float y0, float x1, float 
 }
 
 /* The edge a-b (camera space), clipped and projected into out[*n...]. */
-static void add_edge_dots(aw_dot_t *out, int *n, const view_cam_t *cam, const float a[3], const float b[3], uint8_t color)
+static void add_edge_dots(aw_dot_t *out, int *n, const view_cam_t *cam, const float a[3], const float b[3],
+                          uint8_t color, int limit)
 {
   float va[3], vb[3];
   memcpy(va, a, sizeof(va));
@@ -460,7 +462,7 @@ static void add_edge_dots(aw_dot_t *out, int *n, const view_cam_t *cam, const fl
   y1 *= REF_HEIGHT;
   if (!clip_to_picture(&x0, &y0, &x1, &y1))
     return;
-  add_line(out, n, x0, y0, x1, y1, color);
+  add_line(out, n, x0, y0, x1, y1, color, limit);
 }
 
 /* --- hidden while the game is paused ------------------------------------------------------------- */
@@ -516,12 +518,13 @@ static int sort_near_walls(const view_cam_t *cam)
   const float side_norm = sqrtf(1 + cam->tan_x * cam->tan_x);
   const float top_norm = sqrtf(1 + cam->tan_y * cam->tan_y);
   for (int i = 0; i < n_walls; i++) {
-    if (!wall_shown(map_wall(i)))
+    const airwall_t *wall = map_wall(i);
+    if (!wall_shown(wall))
       continue;
     float dx = wall_geo[i].centre[0] - cam->pos[0];
     float dy = wall_geo[i].centre[1] - cam->pos[1];
     float dz = wall_geo[i].centre[2] - cam->pos[2];
-    bool death = map_wall(i)->kind == VOLUME_VOID;
+    bool death = wall->kind == VOLUME_VOID;
     float limit = (death ? DEATH_RANGE : AW_RANGE) + wall_geo[i].radius;
     float distance_sq = dx * dx + dy * dy + dz * dz;
     /* Reject the common far case without a square root. */
@@ -532,8 +535,8 @@ static int sort_near_walls(const view_cam_t *cam)
     float distance = sqrtf(distance_sq) - wall_geo[i].radius;
     /* Reserve the nearest portion of the list for trigger volumes so
      * dense barriers cannot hide an entrance or a death volume. */
-    if (map_wall(i)->kind == VOLUME_LOADING || map_wall(i)->kind == VOLUME_VOID)
-      distance -= AW_RANGE;
+    if (wall->kind >= VOLUME_LOADING)
+      distance -= DEATH_RANGE;
     if (count == MAX_VISIBLE_VOLUMES && distance >= near_distance[count - 1])
       continue;
     int j = count < MAX_VISIBLE_VOLUMES ? count++ : count - 1;
@@ -562,16 +565,15 @@ void airwall_frame(bool menu_open)
     int n_walls_near = sort_near_walls(&cam);
     for (int k = 0; k < n_walls_near && n < MAX_DOTS; k++) {
       int i = near_order[k];
-      /* Publish a whole visible volume or stop at the last complete one. */
-      int start = n;
       const airwall_t *wall = map_wall(i);
       static const uint8_t colors[] = {
         [VOLUME_BLOCKER] = AW_BLOCKS, [VOLUME_OTHER_WALL] = AW_OTHER,
         [VOLUME_LOADING] = AW_LOADING, [VOLUME_VOID] = AW_VOID,
+        [VOLUME_GROTTO_SAFETY] = AW_GROTTO_SAFETY,
       };
       uint8_t color = colors[wall->kind];
       const __typeof__(wall_geo[0]) *geo = &wall_geo[i];
-      if (wall->kind == VOLUME_VOID && n + 2 < MAX_DOTS) {
+      if (wall->kind >= VOLUME_LOADING && n + 2 <= MAX_DOTS) {
         float centre[3], sx, sy;
         view_point(&cam, geo->centre, centre);
         if (centre[2] > NEAR_PLANE) {
@@ -583,14 +585,20 @@ void airwall_frame(bool menu_open)
           }
         }
       }
+      /* Reduce detail under pressure instead of dropping the whole outline.
+       * No nearby volume can spend more than one fifth of the frame budget. */
+      int budget = MAX_DOTS - n;
+      if (budget > MAX_DOTS / 5)
+        budget = MAX_DOTS / 5;
+      if (!geo->n_edges || budget < geo->n_edges)
+        continue;
+      int limit = budget / geo->n_edges;
+      if (limit > MAX_RECTS_PER_EDGE)
+        limit = MAX_RECTS_PER_EDGE;
       for (int p = geo->first_point; p < geo->first_point + geo->n_points; p++)
         view_point(&cam, points[p], camera_points[p]);
       for (int e = geo->first_edge; n < MAX_DOTS && e < geo->first_edge + geo->n_edges; e++)
-        add_edge_dots(dots[next], &n, &cam, camera_points[edges[e][0]], camera_points[edges[e][1]], color);
-      if (n == MAX_DOTS) {
-        n = start;
-        break;
-      }
+        add_edge_dots(dots[next], &n, &cam, camera_points[edges[e][0]], camera_points[edges[e][1]], color, limit);
     }
   }
   n_dots[next] = n;
@@ -606,12 +614,12 @@ const aw_dot_t *airwall_published(int *n)
 
 void airwall_summary(char *buf, int len)
 {
-  int counts[VOLUME_VOID + 1] = {0};
+  int counts[VOLUME_COUNT] = {0};
   for (int i = 0; i < n_walls; i++)
     counts[map_wall(i)->kind]++;
-  snprintf(buf, len, TF("barriers %d   load %d   death %d"),
+  snprintf(buf, len, TF("walls %d  load %d  void %d  safety %d"),
            counts[VOLUME_BLOCKER] + counts[VOLUME_OTHER_WALL],
-           counts[VOLUME_LOADING], counts[VOLUME_VOID]);
+           counts[VOLUME_LOADING], counts[VOLUME_VOID], counts[VOLUME_GROTTO_SAFETY]);
 }
 
 void airwall_nearest_death(char *buf, int len)

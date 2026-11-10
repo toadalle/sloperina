@@ -11,6 +11,7 @@ typedef struct { uintptr_t actor, property, body; } controller_t;
 static controller_t owner;
 static bool original_no_hit;
 static bool restore_wait_logged;
+static bool restoring;
 
 static uintptr_t next(uintptr_t p, size_t offset)
 {
@@ -182,10 +183,11 @@ bool cct_noclip_begin(void)
   if (!resolve(&current))
     return false;
   if (owner.body)
-    return same(owner, current);
+    return !restoring && same(owner, current);
   original_no_hit = no_hit(current.body);
   owner = current;
   restore_wait_logged = false;
+  restoring = false;
   if (!original_no_hit)
     set_no_hit(owner.body, true);
   log_printf("levitate: controller %#lx, body %#lx, collision bypass on (was %d)",
@@ -196,7 +198,7 @@ bool cct_noclip_begin(void)
 bool cct_noclip_move(const vec3f_t *position)
 {
   controller_t current;
-  if (!owner.body || !resolve(&current) || !same(owner, current) ||
+  if (!owner.body || restoring || !resolve(&current) || !same(owner, current) ||
       !(position->x > -100000 && position->x < 100000 &&
         position->y > -100000 && position->y < 100000 &&
         position->z > -100000 && position->z < 100000))
@@ -211,6 +213,7 @@ void cct_noclip_end(void)
 {
   if (!owner.body)
     return;
+  restoring = true;
   controller_t current;
   uintptr_t actor = link_actor();
   if (actor && actor != owner.actor) {
@@ -218,18 +221,16 @@ void cct_noclip_end(void)
     owner = (controller_t){0};
     return;
   }
-  if (!resolve_body(&current)) {
+  /* Traversal can temporarily substitute a controller on the same Link.
+   * Restore when the owned body returns, even if the property wrapper changed. */
+  if (!resolve_body(&current) || current.body != owner.body) {
     if (!restore_wait_logged)
       log_printf("levitate: controller unavailable; collision restore pending");
     restore_wait_logged = true;
     return; /* Retry while idle; never forget a temporarily unreadable owner. */
   }
-  if (same(owner, current)) {
-    if (no_hit(owner.body) != original_no_hit)
-      set_no_hit(owner.body, original_no_hit);
-    log_printf("levitate: collision bypass restored to %d", original_no_hit);
-  } else {
-    log_printf("levitate: controller changed/unavailable; skipped stale collision restore");
-  }
+  if (no_hit(owner.body) != original_no_hit)
+    set_no_hit(owner.body, original_no_hit);
+  log_printf("levitate: collision bypass restored to %d", original_no_hit);
   owner = (controller_t){0};
 }

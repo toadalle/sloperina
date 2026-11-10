@@ -12,7 +12,7 @@ extern bool airwalls_all;   /* also the kinds that don't stop Link (enemies, sig
 
 /* a piece of an outline: a rectangle of the visible picture, 0..65535 each way, colour index. A side
  * thinner than the line width (a dot, or a straight piece of a line) is widened to it when drawn. */
-enum { AW_BLOCKS, AW_OTHER, AW_LOADING, AW_VOID, AW_NCOLORS };
+enum { AW_BLOCKS, AW_OTHER, AW_LOADING, AW_VOID, AW_GROTTO_SAFETY, AW_NCOLORS };
 typedef struct { uint16_t x0, y0, x1, y1; uint8_t color; } aw_dot_t;
 
 void airwall_frame(bool menu_open);                     /* game thread, once per frame */

@@ -484,22 +484,6 @@ void menu_input(void)
   }
   if (item->kind == MI_NUMBER && number_input(item))
     return;
-  /* The root is presented in a two-column grid. Keep D-pad movement spatial:
-   * vertical steps between rows, horizontal steps between columns. */
-  if (!menu->parent && menu->n_items == 8 && menu->items[0].kind == MI_SUBMENU) {
-    int selected = menu->selected;
-    if (menu_nav_repeat(BTN_DLEFT) && selected < 8 && (selected & 1))
-      menu->selected = selected - 1;
-    else if (menu_nav_repeat(BTN_DRIGHT) && selected < 8 && !(selected & 1))
-      menu->selected = selected + 1;
-    else if (menu_nav_repeat(BTN_DUP))
-      menu->selected = selected >= 2 ? selected - 2 : selected;
-    else if (menu_nav_repeat(BTN_DDOWN))
-      menu->selected = selected < 6 ? selected + 2 : selected;
-    else if (input_pressed() & BTN_A)
-      activate(item);
-    return;
-  }
   bool has_parts = item->n_parts > 1;
   if (menu_nav_repeat(BTN_DUP)) {
     if (!item->on_move || !item->on_move(item, -1))
@@ -869,20 +853,19 @@ void menu_draw(void)
     };
     gfx_begin();
     gfx_dashboard(menu->selected);
-    gfx_text(2, 0, GFX_DIM, "SLOPERINAGZ");
-    gfx_text(2, 2, GFX_TITLE, "PRACTICE MENU");
+    gfx_text(2, 0, GFX_TITLE, "PRACTICE MENU");
     bool pending = __atomic_load_n(&gfx_freeze_request, __ATOMIC_ACQUIRE) != 0;
-    gfx_text(53, 2, menu_pause_owned ? GFX_NOTICE : GFX_TITLE,
+    gfx_text(2, 1, menu_pause_owned ? GFX_NOTICE : GFX_TITLE,
              menu_pause_owned ? "PAUSED" : pending ? "FREEZING" : "LIVE");
     for (int i = 0; i < 8; i++) {
-      int col = GFX_CARD_COL + 2 + (i & 1) * GFX_CARD_PITCH_X;
-      int row = GFX_CARD_ROW + 1 + (i / 2) * GFX_CARD_PITCH_Y;
+      int col = GFX_CARD_COL + 2;
+      int row = GFX_CARD_ROW + i * GFX_CARD_PITCH_Y;
       char label[32];
       snprintf(label, sizeof(label), "%c %.22s", i == menu->selected ? '>' : ' ', T(menu->items[i].label));
       gfx_text(col, row, i == menu->selected ? GFX_TITLE : GFX_NORMAL, label);
       gfx_text(col + 2, row + 1, GFX_DIM, descriptions[i]);
     }
-    gfx_text(2, 24, GFX_DIM, "D-PAD  Move     A  Select     B / D-RIGHT+A  Close");
+    gfx_text(2, 20, GFX_DIM, "A Select   B Close");
     gfx_end();
     return;
   }

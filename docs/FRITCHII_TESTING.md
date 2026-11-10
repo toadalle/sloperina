@@ -7,8 +7,9 @@ primarily for OoT 1.1.1. The controls, dashboard, and text capture are also
 available on 1.0.0 where the corresponding fields can be read.
 
 1. **Menu and HUD.** On a map with Link and visible animated actors, open with
-   D-pad right + A. Expect a centered card dashboard and a static game backdrop
-   with Link, actors, and the stock HUD visible. The header should move from
+   D-pad right + A. Expect a narrow vertical menu at the top left and a static
+   backdrop with Link, actors, and the stock HUD visible. On RGBA8, the frozen
+   menu background uses the opacity setting. The header should move from
    FREEZING to PAUSED. Turn off Settings > Freeze game while open and check
    that animations advance behind the menu. Navigate using D-pad and left
    stick, then close with B or D-pad right + A while holding a stick off center.
@@ -35,16 +36,21 @@ available on 1.0.0 where the corresponding fields can be read.
    or a large relocation. Check for ordinary collision on arrival and capture
    the log if a black screen remains or hover fails to restart.
 4. **Collision outlines.** In Scene > Collision, try the layers separately.
-   Check yellow loading volumes at the Dodongo's Cavern and Forest Temple
-   entrances, red player-void volumes near the Kakariko Village cliff edge,
-   and blue invisible barriers. Kakariko's player-void volumes are cylinders.
-   Death volumes have red center markers and the menu lists the nearest one.
-   The overlay draws through scenery and caps each frame at 20 volumes and
-   720 rectangle commands. Dense terrain wireframe needs a separate batched GPU path.
+   Check yellow loading volumes at Dodongo's Cavern, Forest Temple and the
+   Kakariko grotto, violet fall-safety cylinders below grotto entrances, red
+   standalone player void-out triggers, and blue invisible barriers. The menu
+   lists counts by category and the nearest standalone void-out trigger. The
+   overlay draws through scenery and caps each frame at 20 volumes and 720
+   rectangle commands. Dense terrain wireframe needs a separate batched GPU path.
 5. **Camera and ledges.** Capture Quick Snapshot in open space, then fly through
    a wall or near a ledge. If the camera or Link gets stuck, immediately take
    another Quick Snapshot, followed by Deep Diagnostics. Include the map,
    route, controls and expected behavior with the two captures.
+   If a traversal action briefly swaps Link's controller, check that the log
+   records a deferred collision restore followed by restore to the original
+   mode when the original body returns. Test ordinary walking separately.
+   D-pad right + R3 toggles wall-pass. A pass now requires native ground contact
+   at entry and temporarily holds height while passing.
 
 ## Investigating a loading stall
 

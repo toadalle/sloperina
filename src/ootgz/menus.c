@@ -1893,9 +1893,9 @@ static void build_scene(void)
   menu_item_t *abyss = menu_add_check(&m_collision, "show void zones", get_scene_volume,
                                        set_scene_volume, (intptr_t)&void_zones_shown);
   if (loading)
-    loading->hint = "Yellow: map entrance trigger volumes";
+    loading->hint = "Yellow: map and grotto entrance triggers";
   if (abyss)
-    abyss->hint = "Red: player death and void-out triggers";
+    abyss->hint = "Red: void-out triggers. Violet: grotto fall-safety triggers";
   menu_item_t *show = menu_add_check(&m_collision, "show invisible barriers", get_air_walls_shown, set_air_walls_shown, 0);
   if (show) {
     show->hint = "Blue: invisible walls that block Link";
@@ -2217,7 +2217,7 @@ static void build_settings(void)
   menu_item_t *opacity = menu_add_option(&m_settings, "background opacity", ARRAY_LEN(opacity_names), opacity_names,
                                          get_opacity, set_opacity, 0);
   if (opacity)
-    opacity->hint = "Opacity of the input display background";
+    opacity->hint = "Opacity of the frozen menu backdrop and input display";
   menu_item_t *pause_world = menu_add_check(&m_settings, "freeze game while open", get_menu_pause_world,
                                              set_menu_pause_world, 0);
   if (pause_world) {

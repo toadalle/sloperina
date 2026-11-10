@@ -835,12 +835,15 @@ static void walls_step(double dt, bool double_speed)
       bool held = asked < HELD_BACK * stick_speed && moved < HELD_BACK * stick_speed;
       held_back_for = held ? held_back_for + dt : 0;
       if (held_back_for >= HELD_BACK_TIME) {
-        walking_through = true;
-        walls_trace = 0;
-        phasing = cct_noclip_begin();
-        phase_y = drawn.y;
-        log_printf("walls: held back %.2f s (asked %.2f, moved %.2f of %.2f), through, collision off %d",
-                   held_back_for, asked, moved, stick_speed, (int)phasing);
+        bool grounded;
+        if (cct_on_ground(link_actor(), &grounded) && grounded && cct_noclip_begin()) {
+          walking_through = phasing = true;
+          walls_trace = 0;
+          phase_y = drawn.y;
+          log_printf("walls: held back %.2f s (asked %.2f, moved %.2f of %.2f), through",
+                     held_back_for, asked, moved, stick_speed);
+        }
+        held_back_for = 0;
       }
     }
     double x = cx, z = cz;
@@ -1099,7 +1102,7 @@ static void frame(bool menu_open)
       adjust_flight_speed(1);
   }
   /* D-right + R3 is contextual: flight-speed reset in hover, and an ordinary
-   * walking wall-pass toggle otherwise. Reuse the existing wall bypass,
+   * walking wall-pass toggle otherwise. Reuse the existing grounded wall bypass,
    * which leaves standard floor collision on until actually blocked and
    * holds the current feet height only during a pass. */
   if (!menu_open && !floating && input_shortcut(HOVER_ACTION_COMBO)) {

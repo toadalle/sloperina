@@ -153,6 +153,19 @@ int main(void)
   blocked = A(1); assert(!cct_noclip_move(&p)); cct_noclip_end();
   assert(cct_noclip_active() && toggles == 1); /* retry temporary unavailability */
   blocked = 0; cct_noclip_end(); assert(!cct_noclip_active() && toggles == 2);
+  /* A traversal controller briefly takes over, then the same Link's normal
+   * body returns under a different property wrapper. Restore the saved flag. */
+  reset(); assert(cct_noclip_begin());
+  putp(4, 8, A(7));
+  putp(7, 0, MAIN(Z64HD_VT_CCT_PROPERTY));
+  putp(7, 0x20, A(9)); putp(7, 0x58, A(4));
+  putp(9, 0, MAIN(Z64HD_VT_CCT_BODY));
+  cct_noclip_end();
+  assert(cct_noclip_active() && toggles == 1);
+  putp(7, 0x20, A(6));
+  assert(!cct_noclip_begin() && !cct_noclip_move(&p));
+  cct_noclip_end();
+  assert(!cct_noclip_active() && toggles == 2 && !no_hit(A(6)));
   reset(); assert(cct_noclip_begin());
   actor = A(0) + 8; putp(0, 0x278, A(1)); /* new actor, same-looking reused controller */
   assert(!cct_noclip_move(&p)); cct_noclip_end();

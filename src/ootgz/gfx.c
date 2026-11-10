@@ -34,7 +34,7 @@ static volatile int published_index = -1; /* the current one; -1: nothing shown 
 
 volatile bool gfx_on_screen;
 volatile int gfx_menu_rows = GFX_ROWS;
-volatile int gfx_opacity = 60;
+volatile int gfx_opacity = 40;
 volatile int gfx_menu_scale;
 volatile int gfx_custom_x = -1, gfx_custom_y = -1;
 volatile int gfx_pause_icon;

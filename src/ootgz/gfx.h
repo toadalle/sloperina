@@ -18,10 +18,9 @@
 #define GFX_PANELS 4
 /* Dashboard cards, in text cells. */
 #define GFX_CARD_COL 2
-#define GFX_CARD_ROW 4
+#define GFX_CARD_ROW 3
 #define GFX_CARD_WIDTH 29
-#define GFX_CARD_PITCH_X 31
-#define GFX_CARD_PITCH_Y 4
+#define GFX_CARD_PITCH_Y 2
 #define GFX_PANEL_LOG 2
 #define GFX_PANEL_INPUT 3 /* gz's input display: the stick and the buttons held, bottom-left, no background */
 #define GFX_LOG_MAX 4 /* lines, as gz's SETTINGS_LOG_MAX */
