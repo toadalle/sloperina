@@ -718,6 +718,8 @@ void airwall_nearest_barrier(char *buf, int len)
     return;
   }
   const airwall_t *wall = map_wall(nearest);
-  snprintf(buf, len, "%s, %.2fm to center, %s", wall->actor, (double)sqrtf(best),
+  const float *p = wall_geo[nearest].centre;
+  float x = p[0] - link.x, y = p[1] - link.y, z = p[2] - link.z;
+  snprintf(buf, len, "%s, %.2fm to center, %s", wall->actor, (double)sqrtf(x * x + y * y + z * z),
            wall->kind == VOLUME_BLOCKER ? "player barrier" : "special-purpose barrier");
 }
