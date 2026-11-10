@@ -10,5 +10,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Run host regression tests
+        run: |
+          python3 tests/run_js_height.py
+          python3 tests/run_levitate.py
       - name: Build SloperinaGZ with devkitA64
         run: ./docker-make
+      - name: Upload Fritchii test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: sloperina-stage1-${{ github.sha }}
+          path: |
+            bin/subsdk9
+            bin/33FA6C2C23848282A77E8B88A0A93F4887C55920.ips
+            bin/E0F3CCFAF50065AE4EA01EB5AEB13B1A45DA3348.ips
+          retention-days: 7

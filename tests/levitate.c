@@ -14,9 +14,10 @@ static int32_t stick_x;
 static bool mapped = true;
 static bool controller_active, controller_available = true;
 static int controller_moves, controller_restores;
-static int velocity_resets, distance_resets;
+static int velocity_resets, velocity_stops, distance_resets;
 static bool on_ground;
 bool cct_reset_vertical_velocity(uintptr_t a) { (void)a; velocity_resets++; return controller_available; }
+bool cct_stop_velocity(uintptr_t a) { (void)a; velocity_stops++; return controller_available; }
 bool cct_clear_fall_distance(uintptr_t a) { (void)a; distance_resets++; return controller_available; }
 bool cct_on_ground(uintptr_t a, bool *grounded) { (void)a; *grounded = on_ground; return controller_available; }
 bool cct_noclip_begin(void) { return controller_active = controller_available; }
@@ -25,6 +26,7 @@ bool cct_noclip_move(const vec3f_t *p) { (void)p; controller_moves++; return con
 void cct_noclip_end(void) { if (controller_active) controller_restores++; controller_active = false; }
 bool cheats[CHEAT_COUNT];
 uint32_t input_hide_from_game;
+uint32_t input_hide_sticks_from_game;
 
 uintptr_t link_actor(void) { return (uintptr_t)actor_memory; }
 uintptr_t camera(void) { return (uintptr_t)cam; }
@@ -70,12 +72,13 @@ static void start(bool walls)
   controller_active = false;
   controller_available = true;
   controller_moves = controller_restores = 0;
-  velocity_resets = distance_resets = 0;
+  velocity_resets = velocity_stops = distance_resets = 0;
+  input_hide_from_game = input_hide_sticks_from_game = 0;
   on_ground = false;
   levitate_through_walls = walls;
   levitate_speed = 4;
   levitate_move_speed = 6;
-  held = BTN_RSTICK;
+  held = 0;
   pressed = 0;
   stick_x = 0;
   record = (uintptr_t)physics;
@@ -190,7 +193,8 @@ static void test_vertical_controls(void)
     assert(vel_y == 0 && physics[1] == height);
     held = BTN_B | BTN_RSTICK;
     step();
-    assert(vel_y == 0 && physics[1] == height);
+    assert(vel_y < 0 && physics[1] < height); /* R3 no longer overrides vertical movement */
+    height = physics[1];
     held = BTN_B;
     float_step(1.0 / 30.0, true);
     assert(vel_y == 0 && physics[1] == height);
@@ -207,11 +211,12 @@ static void test_vertical_controls(void)
   pressed = BTN_LSTICK;
   levitate_frame(false);
   assert(floating && input_hide_from_game == (BTN_LSTICK | BTN_RSTICK | BTN_X | BTN_B));
+  assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
   levitate_frame(false); /* second L3 press turns it off in the same frame */
-  assert(!floating && input_hide_from_game == BTN_LSTICK);
+  assert(!floating && input_hide_from_game == BTN_LSTICK && input_hide_sticks_from_game == 0);
   levitate_enabled = false;
   levitate_frame(false);
-  assert(input_hide_from_game == 0);
+  assert(input_hide_from_game == 0 && input_hide_sticks_from_game == 0);
   start(true);
   mapped = false;
   levitate_frame(false);
@@ -219,12 +224,48 @@ static void test_vertical_controls(void)
   puts("PASS: X/B ascent/descent, hover, reversal, both/hold/menu, floor bypass and button masking");
 }
 
+static void test_ghost_toggle(void)
+{
+  start(false);
+  floating = moving_link = false;
+  held = BTN_R | BTN_LSTICK;
+  pressed = BTN_LSTICK;
+  levitate_frame(false);
+  assert(!floating); /* frame-advance chord must not also toggle hover */
+
+  start(false);
+  floating = moving_link = false;
+  held = BTN_LSTICK;
+  pressed = BTN_LSTICK;
+  levitate_frame(false);
+  assert(floating && moving_link && !levitate_through_walls && !controller_active);
+  assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
+
+  held = BTN_RSTICK;
+  pressed = BTN_RSTICK;
+  levitate_frame(false);
+  assert(floating && levitate_through_walls && controller_active);
+  assert(controller_moves == 1 && velocity_stops == 1);
+
+  held = 0;
+  pressed = 0;
+  levitate_frame(false);
+  assert(controller_moves == 2 && velocity_stops == 2);
+
+  held = BTN_RSTICK;
+  pressed = BTN_RSTICK;
+  levitate_frame(false);
+  assert(floating && !levitate_through_walls && !controller_active && controller_restores == 1);
+  assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
+  puts("PASS: L3 hover guard, R3 ghost toggle, full velocity stop and left-stick gameplay masking");
+}
+
 static void test_controller_path(void)
 {
   start(true);
   held = BTN_X;
   levitate_frame(false);
-  assert(controller_active && controller_moves == 1);
+  assert(controller_active && controller_moves == 1 && velocity_stops == 1);
   double height = physics[1];
   physics[1] += 0.5; /* Ignore leftover collision corrections in actual noclip. */
   held = 0;
@@ -345,6 +386,7 @@ int main(void)
   puts("PASS: rising platforms, rise/hold/menu/drop, invalid record and fresh-scene height");
   test_release();
   test_vertical_controls();
+  test_ghost_toggle();
   test_controller_path();
   return 0;
 }

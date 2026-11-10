@@ -99,6 +99,10 @@ uint32_t input_pressed(void) { return 0; }
 bool input_repeat(uint32_t button) { (void)button; return false; }
 bool input_block_game;
 bool input_combo(uint32_t mask) { (void)mask; return false; }
+void input_suppress_until_release(uint32_t mask) { (void)mask; }
+bool pause_menu_acquire(void) { return true; }
+void pause_menu_release(void) {}
+bool pause_menu_owned(void) { return false; }
 void input_sticks(int32_t *a, int32_t *b, int32_t *c, int32_t *d) { *a = *b = *c = *d = 0; }
 const char *gd_get_str(int field) { (void)field; return "test"; }
 void airwall_link_text(char *buf, int len) { snprintf(buf, len, "outside"); }
@@ -233,8 +237,18 @@ static void test_settings(void)
   settings_load();
   assert(levitate_speed == 0); /* invalid negative speed is ignored */
   snprintf(settings, sizeof(settings), "levitate_speed=4\n");
+  menu_pause_world = true;
   settings_load();
-  assert(levitate_speed == 4); /* existing positive settings still work */
+  assert(levitate_speed == 4 && menu_pause_world); /* missing new key preserves the default */
+  snprintf(settings, sizeof(settings), "menu_pause_world=0\n");
+  settings_load();
+  assert(!menu_pause_world);
+  watch_set_label(0, "pause save");
+  for (int i = 0; i < 60; i++) settings_frame(false);
+  assert(strstr(settings, "menu_pause_world=0\n"));
+  snprintf(settings, sizeof(settings), "menu_pause_world=1\n");
+  settings_load();
+  assert(menu_pause_world);
   sd_available = false;
   settings_load();
   assert(watch_has(W_JS_HEIGHT));
