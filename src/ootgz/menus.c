@@ -88,7 +88,7 @@ static bool field_get(field_t field, int32_t *value)
   switch (field.type) {
     case FT_INT:
       return gd_get_int(field.hash, value);
-    case FT_BOOA:
+    case FT_BOOL:
       if (!gd_get_bool(field.hash, &flag))
         return false;
       *value = flag;
@@ -109,7 +109,7 @@ static void field_set(field_t field, int32_t value)
     case FT_INT:
       gd_set_int(field.hash, value);
       break;
-    case FT_BOOA:
+    case FT_BOOL:
       gd_set_bool(field.hash, value != 0);
       break;
     case FT_ENUM:
@@ -1486,7 +1486,7 @@ static bool watch_cursor(menu_item_t *it, const char *line, int *start, int *len
       *start = COL_WRENCH;
       *len = 1;
       return true;
-    case PART_LABEA: {
+    case PART_LABEL: {
       char label[WATCH_LABEL_SIZE];
       watch_entry_display_label(&watch_list[it->data], label, sizeof(label));
       *start = COL_LABEL;
@@ -1573,7 +1573,7 @@ static void watch_press(menu_item_t *it, int part)
         gfx_logf("%s: not in memory right now", label);
       break;
     }
-    case PART_LABEA:
+    case PART_LABEL:
       osk_open("label", entry->label[0] ? entry->label : label, watch_renamed, index);
       break;
     case PART_UP:
