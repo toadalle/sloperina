@@ -7,6 +7,7 @@
 #include "data.h"
 #include "gamedata.h"
 #include "airwall.h"
+#include "diagnostics.h"
 #include "enemyhp.h"
 #include "memview.h"
 #include "osk.h"
@@ -2200,18 +2201,21 @@ static void build_levitate(void)
   menu_item_t *walls = menu_add_check(&m_levitate, "through walls", get_walls, set_walls, 0);
   if (walls)
     walls->hint = "Ghost collision state while hovering; R3 is the normal toggle";
-  menu_item_t *rise = menu_add_option(&m_levitate, "vertical speed", 7, lev_speed_names, get_lev_speed, set_lev_speed, 0);
+  menu_item_t *rise = menu_add_option(&m_levitate, "base rise speed", 7, lev_speed_names, get_lev_speed, set_lev_speed, 0);
   if (rise)
-    rise->hint = "X/B speed; legacy 0 uses 4. Release to hover";
-  menu_item_t *move = menu_add_option(&m_levitate, "move speed", 7, lev_move_names, get_lev_move, set_lev_move, 0);
+    rise->hint = "X/B speed at flight preset 6. Legacy 0 uses 4";
+  menu_item_t *move = menu_add_option(&m_levitate, "flight speed", 7, lev_move_names, get_lev_move, set_lev_move, 0);
   if (move)
-    move->hint = "Horizontal flight speed; Y decreases / A increases while hovering";
+    move->hint = "Flight speed on all axes. Y decreases / A increases while hovering";
   menu_end_group(&m_levitate);
   menu_add_return(&m_levitate);
   /* what can only be read, under return after a blank line */
   menu_add_text(&m_levitate, text_static, (intptr_t) "");
   menu_add_text(&m_levitate, text_levitate, 0);
 }
+
+static bool get_reset_flight_speed(menu_item_t *it) { return levitate_reset_speed; }
+static void set_reset_flight_speed(menu_item_t *it, bool on) { levitate_reset_speed = on; }
 
 static void build_settings(void)
 {
@@ -2226,14 +2230,19 @@ static void build_settings(void)
   menu_item_t *opacity = menu_add_option(&m_settings, "background opacity", ARRAY_LEN(opacity_names), opacity_names,
                                          get_opacity, set_opacity, 0);
   if (opacity)
-    opacity->hint = "below 100%: costs some speed, and what's behind lags 2 frames";
+    opacity->hint = "Applies to watches and submenus. The dashboard is opaque";
   menu_item_t *pause_world = menu_add_check(&m_settings, "pause game while open", get_menu_pause_world,
                                              set_menu_pause_world, 0);
   if (pause_world) {
-    pause_world->hint = "default: stop world simulation; off keeps the game live for inspection";
+    pause_world->hint = "Off by default. Native pause can hide Link and other objects";
     pause_world->log_label = "menu world pause";
   }
   menu_end_group(&m_settings);
+  menu_item_t *reset_speed = menu_add_check(&m_settings, "reset flight speed on hover",
+                                             get_reset_flight_speed, set_reset_flight_speed, 0);
+  if (reset_speed)
+    reset_speed->hint = "Start each L3 hover at 6. Off keeps the last flight speed";
+
   menu_add_submenu(&m_settings, "about", &m_about);
   menu_add_return(&m_settings);
 
@@ -2431,10 +2440,17 @@ static void build_pause_research(void)
   menu_add_return(&m_pause_research);
 }
 
+static void dump_dev_info(menu_item_t *it)
+{
+  diagnostics_dump(it->data != 0);
+}
+
 static void build_debug(void)
 {
   build_pause_research();
-  menu_init(&m_debug, "debug", 4);
+  menu_init(&m_debug, "diagnostics", 6);
+  menu_add_action(&m_debug, "quick snapshot", dump_dev_info, 0);
+  menu_add_action(&m_debug, "deep diagnostics", dump_dev_info, 1);
   menu_add_submenu(&m_debug, "heap", &m_heap);
   menu_add_submenu(&m_debug, "memory", &memview_menu);
   menu_add_submenu(&m_debug, "pause research", &m_pause_research);

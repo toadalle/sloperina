@@ -25,6 +25,7 @@ const struct z64hd_build *z64hd_game = &test_build;
 bool enemy_hp_shown;
 bool cheats[CHEAT_COUNT], frame_advance, pause_display, warp_arrival_cutscenes;
 bool levitate_enabled, levitate_through_walls, airwalls_shown, airwalls_all;
+bool levitate_reset_speed = true;
 int frame_advance_button, levitate_speed = 5, levitate_move_speed = 5;
 
 static uintptr_t actor, first, player, base;
@@ -236,17 +237,18 @@ static void test_settings(void)
   snprintf(settings, sizeof(settings), "levitate_speed=-1\n");
   settings_load();
   assert(levitate_speed == 0); /* invalid negative speed is ignored */
-  snprintf(settings, sizeof(settings), "levitate_speed=4\n");
-  menu_pause_world = true;
+  snprintf(settings, sizeof(settings), "levitate_speed=4\nmenu_pause_world=1\n");
+  menu_pause_world = false;
   settings_load();
-  assert(levitate_speed == 4 && menu_pause_world); /* missing new key preserves the default */
-  snprintf(settings, sizeof(settings), "menu_pause_world=0\n");
+  assert(levitate_speed == 4 && !menu_pause_world && levitate_reset_speed);
+  snprintf(settings, sizeof(settings), "practice_menu_pause=0\nlevitate_reset_speed=0\n");
   settings_load();
-  assert(!menu_pause_world);
+  assert(!menu_pause_world && !levitate_reset_speed);
   watch_set_label(0, "pause save");
   for (int i = 0; i < 60; i++) settings_frame(false);
-  assert(strstr(settings, "menu_pause_world=0\n"));
-  snprintf(settings, sizeof(settings), "menu_pause_world=1\n");
+  assert(strstr(settings, "practice_menu_pause=0\n"));
+  assert(strstr(settings, "levitate_reset_speed=0\n"));
+  snprintf(settings, sizeof(settings), "practice_menu_pause=1\n");
   settings_load();
   assert(menu_pause_world);
   sd_available = false;

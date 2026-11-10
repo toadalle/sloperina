@@ -496,12 +496,12 @@ static const uint8_t style_rgb[GFX_NSTYLES][3] = {
   [GFX_NORMAL] = { 0xFF, 0xFF, 0xFF },
   [GFX_SELECTED] = { 0x80, 0xFF, 0x80 },
   [GFX_TITLE] = { 0xA0, 0xC8, 0xFF },
-  [GFX_DIM] = { 0x90, 0x90, 0x90 },
+  [GFX_DIM] = { 0xA3, 0xB1, 0xC3 },
   [GFX_NOTICE] = { 0xFF, 0xE0, 0x60 },
   [GFX_LOG] = { 0xC0, 0xC0, 0xC0 },   /* gz's log colour */
   [GFX_FAINT] = { 0x50, 0x50, 0x58 }, /* the controller's buttons not held */
 };
-static const uint8_t bg_rgb[3] = { 0x18, 0x18, 0x20 };
+static const uint8_t bg_rgb[3] = { 0x10, 0x17, 0x22 };
 
 /* value / 255 as an IEEE half-precision float (0..1), from the single-precision bits */
 static uint16_t to_half_float(uint8_t value)
@@ -543,7 +543,11 @@ enum {
   PAL_FOLDER,                  /* + 0..3: the folder's yellows */
   PAL_SHADOW = PAL_FOLDER + 4, /* the log's drop shadow */
   PAL_FILL,                    /* + style: the box's inside, half the style colour */
-  PAL_COUNT = PAL_FILL + GFX_NSTYLES
+  PAL_CARD = PAL_FILL + GFX_NSTYLES,
+  PAL_CARD_SELECTED,
+  PAL_CARD_BORDER,
+  PAL_CARD_ACCENT,
+  PAL_COUNT
 };
 
 /* Icons are 10x10 tiles, one string per row. */
@@ -859,6 +863,33 @@ static void build_palette(uint8_t pal[PAL_COUNT][3])
   };
   memcpy(pal[PAL_FOLDER], folder, sizeof(folder));
   memset(pal[PAL_SHADOW], 0, 3);
+  static const uint8_t card_colours[][3] = {
+    { 0x19, 0x25, 0x35 }, { 0x21, 0x35, 0x4D }, { 0x36, 0x4A, 0x62 }, { 0x82, 0xBD, 0xF6 },
+  };
+  memcpy(pal[PAL_CARD], card_colours, sizeof(card_colours));
+}
+
+/* The dashboard is composited in one opaque panel, with no GPU readback. */
+static uint8_t dashboard_background(const gfx_panel_t *panel, int x, int y)
+{
+  int card_x = x - (GFX_CARD_COL + 1) * FONT_W;
+  int card_y = y - (TEXT_TOP + GFX_CARD_ROW * CELL_H);
+  if (card_x < 0 || card_y < 0)
+    return 0;
+  int col = card_x / (GFX_CARD_PITCH_X * FONT_W);
+  int row = card_y / (GFX_CARD_PITCH_Y * CELL_H);
+  int inside_x = card_x % (GFX_CARD_PITCH_X * FONT_W);
+  int inside_y = card_y % (GFX_CARD_PITCH_Y * CELL_H);
+  int width = GFX_CARD_WIDTH * FONT_W;
+  int height = GFX_CARD_PITCH_Y * CELL_H - 2;
+  if (col >= 2 || row >= 4 || inside_x >= width || inside_y >= height)
+    return 0;
+  bool selected = panel->dashboard == 1 + row * 2 + col;
+  if ((inside_x == 0 || inside_x == width - 1) && (inside_y == 0 || inside_y == height - 1))
+    return 0; /* clipped corners */
+  if (inside_x == 0 || inside_x == width - 1 || inside_y == 0 || inside_y == height - 1)
+    return selected ? PAL_CARD_ACCENT : PAL_CARD_BORDER;
+  return selected ? PAL_CARD_SELECTED : PAL_CARD;
 }
 
 /* Opaque: write the panel straight into a buffer in the picture's format. Rows are built in a
@@ -876,7 +907,10 @@ static void rasterise(const gfx_panel_t *panel, uint8_t *dst, int scale, int w, 
     encoded[i] = encode_pixel(pal[i]);
   for (int y = 0; y < h; y++) {
     for (int x = 0; x < w; x++) {
-      uint64_t colour = encoded[panel_pixel(panel, x, y, scale)];
+      uint8_t pixel = panel_pixel(panel, x, y, scale);
+      if (!pixel && panel->dashboard)
+        pixel = dashboard_background(panel, x * SC_ONE / scale, y * SC_ONE / scale);
+      uint64_t colour = encoded[pixel];
       if (bytes_per_pixel == 8) {
         memcpy(row_buffer + x * 8, &colour, 8);
       } else {
@@ -1331,7 +1365,10 @@ static void place_panel(int p, const gfx_panel_t *panel, const frame_t *frame, i
   int x = margin;
   int y = margin;
   if (p == PANEL_MENU) {
-    if (panel->fullscreen) {
+    if (panel->dashboard) {
+      x = (area.w - w) / 2;
+      y = (area.h - h) / 2;
+    } else if (panel->fullscreen) {
       x = margin;
       y = margin;
     } else {
@@ -1589,7 +1626,7 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
       n++;
       continue;
     }
-    if (frame.see_through) {
+    if (frame.see_through && !panel->dashboard) {
       nvn_rect_t placed = { x, y, w, h };
       if (!plan_see_through_panel(draw, p, panel, cols, rows, placed, scale, &frame))
         continue;

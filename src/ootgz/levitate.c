@@ -42,6 +42,7 @@
 float hypotf(float x, float y); /* from sdk */
 
 bool levitate_enabled;
+bool levitate_reset_speed = true;
 bool levitate_through_walls;
 int levitate_speed = 4;       /* rise, units/s */
 #define FLIGHT_SPEED_DEFAULT 6 /* original mod flight move speed */
@@ -88,8 +89,7 @@ static void adjust_flight_speed(int direction)
 #define WALL_MEMORY 0.15        /* s a wall stays marked */
 #define STEADY_TIME 0.1         /* s Link must keep his heading before a push-back counts */
 #define SAME_WAY_MIN 0.7        /* cosine of the angle within which two directions are the same way */
-#define FROZEN_FRAMES 3         /* frames with neither the record nor the drawn position moving */
-#define FROZEN_AFTER 0.3        /* s of floating before a freeze can be told from the float starting */
+#define RESPAWN_JUMP 12         /* more than one commanded hover step, even with a slow frame */
 #define STILL_SPEED 0.05        /* below this Link isn't moving (and keeps his heading) */
 #define TINY_VELOCITY 0.01      /* the velocity written when he isn't moving, so he keeps facing */
 #define SPEED_MAX_STEP_SQ 4.0   /* 2x speed: a bigger move (squared) is a warp or a respawn */
@@ -133,6 +133,7 @@ static enum {
   SEARCH_FAILED,  /* waiting before searching again */
 } search_state;
 static uintptr_t record;
+static uintptr_t record_actor;
 /* the 48 bytes after the position are game.py's motion state (floats); in the record this search
  * finds they're more position doubles, and writing motion state over them crashed the game */
 static bool record_has_motion;
@@ -243,6 +244,7 @@ static void search_start(bool quiet)
   uintptr_t link = link_actor();
   if (!link || !link_drawn_pos(&search_pos))
     return;
+  record_actor = link;
   n_heap_regions = 0;
   sys_regions(SYS_PERM_R | SYS_PERM_W, add_heap_region, 0);
   /* records are made again in each area, near where they were (game.py POS_NEAR) */
@@ -279,10 +281,16 @@ static bool record_matches(uintptr_t addr, double *error)
 static bool scan_step(void)
 {
   size_t budget = SCAN_PER_FRAME;
-  link_drawn_pos(&search_pos); /* where Link is now (he may be moving) */
+  if (!link_drawn_pos(&search_pos))
+    return false;
   while (scan_region < n_heap_regions && budget) {
     uintptr_t end = heap_regions[scan_region].hi - RECORD_SIZE;
     uintptr_t stop = scan_pos + budget < end ? scan_pos + budget : end;
+    if (stop <= scan_pos || !sys_mapped(scan_pos, stop - scan_pos + RECORD_SIZE, SYS_PERM_R | SYS_PERM_W)) {
+      if (++scan_region < n_heap_regions)
+        scan_pos = heap_regions[scan_region].lo;
+      continue;
+    }
     for (uintptr_t p = scan_pos; p < stop; p += 8) {
       double error;
       if (record_matches(p, &error)) {
@@ -343,28 +351,35 @@ static void search_failed(void)
 
 /* Lift the height only; the motion state (which the game needs to take the position while Link
  * stands) is written only where it's all zero, never over other data. */
-static void test_start(void)
+static bool test_start(void)
 {
   uintptr_t addr = candidate.addr;
   bool motion_zero;
+  if (!sys_mapped(addr, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W) || !link_drawn_pos(&test_start_pos))
+    return false;
   memcpy(saved_record, (void *)addr, sizeof(saved_record));
   plausible_motion(addr + RECORD_POS_SIZE, &motion_zero);
-  link_drawn_pos(&test_start_pos);
-  const volatile uint32_t *motion = (const volatile uint32_t *)(addr + RECORD_POS_SIZE);
-  log_printf("levitate: testing %#lx (off by %.3f, motion %s: %08x %08x %08x %08x)", (unsigned long)addr,
-             candidate.error, motion_zero ? "zero" : "set", motion[0], motion[1], motion[2], motion[3]);
+  log_printf("levitate: testing %#lx (off by %.3f, motion %s)", (unsigned long)addr,
+             candidate.error, motion_zero ? "zero" : "set");
   test_wrote_motion = motion_zero;
   const volatile double *pos = (const volatile double *)addr;
   write_record(addr, pos[0], pos[1] + TEST_LIFT, pos[2], 0, 0, 0, test_wrote_motion);
   test_frames = 0;
   n_tested++;
   search_state = SEARCH_TESTING;
+  return true;
 }
 
 static void test_step(void)
 {
+  if (!sys_mapped(candidate.addr, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W)) {
+    search_state = SEARCH_IDLE;
+    return;
+  }
   vec3f_t now;
-  if (link_drawn_pos(&now) && now.y - test_start_pos.y > TEST_LIFT / 2) {
+  if (link_drawn_pos(&now) && abs_double(now.x - test_start_pos.x) < FOLLOW_TOLERANCE &&
+      abs_double(now.z - test_start_pos.z) < FOLLOW_TOLERANCE &&
+      abs_double(now.y - test_start_pos.y - TEST_LIFT) < TEST_LIFT / 2) {
     record = candidate.addr;
     record_has_motion = true;
     last_found = record;
@@ -392,7 +407,7 @@ static void test_step(void)
 static bool record_follows_link(void)
 {
   vec3f_t drawn;
-  if (!record || !link_drawn_pos(&drawn) || !sys_mapped(record, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W))
+  if (!record || record_actor != link_actor() || !link_drawn_pos(&drawn) || !sys_mapped(record, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W))
     return false;
   volatile double *pos = (volatile double *)record;
   return abs_double(pos[0] - drawn.x) < FOLLOW_TOLERANCE && abs_double(pos[2] - drawn.z) < FOLLOW_TOLERANCE &&
@@ -469,7 +484,6 @@ static double next_heading_sample;
 static double float_clock;                     /* s of gameplay since the float started */
 static double last_written[3];
 static vec3f_t last_drawn;
-static int frozen_frames;
 static int float_trace; /* frames of float logged (diagnostics) */
 
 static void drop(void)
@@ -519,7 +533,6 @@ static void float_start(void)
   vel_x = vel_y = vel_z = heading_x = heading_z = wall_x = wall_z = 0;
   wall_until = next_heading_sample = float_clock = 0;
   memset(past_headings, 0, sizeof(past_headings));
-  frozen_frames = 0;
   link_drawn_pos(&last_drawn);
   controller_y_offset = pos_y - last_drawn.y;
   last_written[0] = pos_x, last_written[1] = pos_y, last_written[2] = pos_z;
@@ -527,23 +540,13 @@ static void float_start(void)
   float_trace = 0;
 }
 
-/* Gameplay frozen (pause screen, item menus; the frame counter keeps going there): neither has the
- * record moved off what we wrote nor Link been redrawn (game.py LEV_PAUSED_AFTER). */
-static void track_frozen(double cx, double cy, double cz, vec3f_t drawn)
-{
-  bool moved = cx != last_written[0] || cy != last_written[1] || cz != last_written[2] ||
-               drawn.x != last_drawn.x || drawn.y != last_drawn.y || drawn.z != last_drawn.z;
-  frozen_frames = moved ? 0 : frozen_frames + 1;
-  last_drawn = drawn;
-}
-
 /* X/B control height; neither or both hold the current height. */
 static void steer(double dt)
 {
   float_clock += dt;
   int vertical = !!(input_held() & BTN_X) - !!(input_held() & BTN_B);
-  double rise = levitate_speed > 0 ? levitate_speed : 4;
   double move = levitate_move_speed;
+  double rise = (levitate_speed > 0 ? levitate_speed : 4) * move / FLIGHT_SPEED_DEFAULT;
   if (!vertical || vel_y * vertical < 0)
     vel_y = 0;
   if (vertical)
@@ -604,8 +607,11 @@ static void float_step(double dt, bool menu_open)
   volatile double *pos = (volatile double *)record;
   double cx = pos[0], cy = pos[1], cz = pos[2];
   vec3f_t drawn;
-  link_drawn_pos(&drawn);
-  track_frozen(cx, cy, cz, drawn);
+  if (!link_drawn_pos(&drawn)) {
+    drop();
+    return;
+  }
+  last_drawn = drawn;
   uint32_t buttons = input_held();
   int vertical = !!(buttons & BTN_X) - !!(buttons & BTN_B);
   bool descend_through_floor = !menu_open && levitate_through_walls && vertical < 0;
@@ -615,11 +621,11 @@ static void float_step(double dt, bool menu_open)
     double fx = 0, fz = 0;
     link_facing(&fx, &fz);
     log_printf("levitate f%d: record y %.3f (we wrote %.3f) x %.3f z %.3f | drawn y %.3f | facing %.3f,%.3f | "
-               "frozen %d clock %.2f", float_trace, cy, last_written[1], cx, cz, (double)drawn.y, fx, fz,
-               frozen_frames, float_clock);
+               "clock %.2f", float_trace, cy, last_written[1], cx, cz, (double)drawn.y, fx, fz,
+               float_clock);
     float_trace++;
   }
-  if ((frozen_frames >= FROZEN_FRAMES && float_clock > FROZEN_AFTER) || menu_open) {
+  if (menu_open) {
     vel_x = vel_y = vel_z = 0;
   } else {
     steer(dt);
@@ -878,6 +884,8 @@ static void handle_l3(bool menu_open)
       gfx_notice("levitate off");
     } else {
       floating = true;
+      if (levitate_reset_speed)
+        levitate_move_speed = FLIGHT_SPEED_DEFAULT;
       levitate_through_walls = false; /* always enter hover with normal collision */
       quiet_search = false;
       gfx_notice("levitate on");
@@ -890,7 +898,8 @@ static bool search_running(void)
 {
   if (search_state == SEARCH_FINDING) {
     if (scan_step()) {
-      test_start();
+      if (!test_start())
+        search_state = SEARCH_IDLE;
     } else if (scan_region >= n_heap_regions) {
       log_printf("levitate: no match in %u MiB of heap (%d tested)", (unsigned)(bytes_scanned >> 20), n_tested);
       search_failed();
@@ -934,7 +943,8 @@ void link_record_request(void)
  * leftovers in it, so it's rarely all zero (game.py's move wrote it every time too). */
 bool link_record_move(double x, double y, double z, float face_vx, float face_vz, int settle_frames)
 {
-  if (search_state != SEARCH_READY || !sys_mapped(record, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W))
+  if (search_state != SEARCH_READY || record_actor != link_actor() ||
+      !sys_mapped(record, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W))
     return false;
   write_record(record, x, y + PHYS_Y, z, face_vx, 0, face_vz, record_has_motion);
   if (moving_link) { /* floating: carry on from there */
@@ -955,7 +965,7 @@ bool link_record_move(double x, double y, double z, float face_vx, float face_vz
 void link_record_resync(void)
 {
   vec3f_t drawn;
-  if (search_state != SEARCH_READY || !link_drawn_pos(&drawn) || !sys_mapped(record, 24, SYS_PERM_W))
+  if (search_state != SEARCH_READY || record_actor != link_actor() || !link_drawn_pos(&drawn) || !sys_mapped(record, 24, SYS_PERM_W))
     return;
   volatile double *pos = (volatile double *)record;
   pos[0] = drawn.x;
@@ -974,28 +984,54 @@ void link_record_resync(void)
 
 /* --- frame --------------------------------------------------------------------------------------- */
 
+static void abandon_record(const char *reason)
+{
+  log_printf("levitate: %s, discarding record and search", reason);
+  /* Invalidate before release. Native cleanup revalidates its own owner. */
+  record = 0;
+  record_actor = 0;
+  last_found = 0;
+  search_state = SEARCH_IDLE;
+  hold_frames = 0;
+  drop();
+  walls_stop();
+  landing_actor = 0;
+  speed_known = false;
+  walls_known = false;
+}
+
 static void frame(bool menu_open)
 {
   if (hold_frames > 0)
     hold_frames--;
   double dt = frame_seconds();
-  protect_landing(menu_open);
   /* The verified PauseManager provides a read-only sign that the game is
    * transitioning. Stop writing Link's position immediately and restore
    * collision ownership before old scene/controller objects are torn down.
    * Never re-enter hover while these native requests are active. */
   if (pause_transition_active()) {
-    if (floating) {
-      log_printf("levitate: native transition pause active, releasing hover");
-      drop();
+    if (floating)
       gfx_notice("hover off: scene transition");
-    }
-    if (walking_through || phasing)
-      walls_stop();
-    speed_known = false;
-    walls_known = false;
+    if (record_actor || floating || walking_through)
+      abandon_record("native transition pause");
     return;
   }
+  if (record_actor && record_actor != link_actor()) {
+    abandon_record("Link actor changed");
+    return;
+  }
+  if (gd_game_paused(0, 0) || pause_menu_owned())
+    return;
+  if (moving_link && !hold_frames) {
+    vec3f_t drawn;
+    if (!link_drawn_pos(&drawn) || abs_double(drawn.x - last_drawn.x) > RESPAWN_JUMP ||
+        abs_double(drawn.y - last_drawn.y) > RESPAWN_JUMP ||
+        abs_double(drawn.z - last_drawn.z) > RESPAWN_JUMP) {
+      abandon_record("Link relocated during hover");
+      return;
+    }
+  }
+  protect_landing(menu_open);
   handle_l3(menu_open);
   if (!menu_open && floating) {
     uint32_t speed_buttons = input_pressed() & (BTN_Y | BTN_A);
@@ -1030,19 +1066,10 @@ static void frame(bool menu_open)
   if (search_state == SEARCH_FAILED && --retry_wait_frames <= 0)
     search_state = SEARCH_IDLE;
 
-  if (search_state == SEARCH_READY && !hold_frames && (!sys_mapped(record, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W) ||
-      (!record_follows_link() && !(moving_link && frozen_frames)))) {
-    log_printf("levitate: lost Link's record (new area?)");
-    /* Don't silently abandon a ghost CCT owner when the record goes stale:
-     * drop() revalidates writes and restores the controller when possible. */
-    drop();
-    record = 0;
-    search_state = SEARCH_IDLE;
-    moving_link = false;
-    floating = false;
-    speed_known = false;
-    walls_known = false;
-    walls_stop();
+  if (search_state == SEARCH_READY && (!sys_mapped(record, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W) ||
+      (!hold_frames && !record_follows_link()))) {
+    abandon_record("physics record no longer follows Link");
+    return;
   }
 
   bool want_speed = cheats[CHEAT_SPEED] && !floating && !menu_open;
@@ -1104,6 +1131,24 @@ void levitate_frame(bool menu_open)
                          (floating ? BTN_RSTICK | BTN_X | BTN_B | BTN_Y | BTN_A : 0);
   /* Hover owns horizontal movement; keep the right stick available to the camera. */
   input_hide_sticks_from_game = floating ? INPUT_HIDE_LEFT_STICK : 0;
+}
+
+uintptr_t levitate_record_snapshot(void *out, size_t capacity, size_t *size)
+{
+  *size = 0;
+  if (search_state != SEARCH_READY || !record_follows_link())
+    return 0;
+  size_t bytes = record_has_motion ? RECORD_SIZE : RECORD_POS_SIZE;
+  if (capacity < bytes)
+    return 0;
+  memset(out, 0, bytes);
+  memcpy(out, (const void *)record, RECORD_POS_SIZE);
+  if (record_has_motion) {
+    memcpy((uint8_t *)out + RECORD_REQUESTED_VEL, (const void *)(record + RECORD_REQUESTED_VEL), 12);
+    memcpy((uint8_t *)out + RECORD_COLLIDED_VEL, (const void *)(record + RECORD_COLLIDED_VEL), 12);
+  }
+  *size = bytes;
+  return record;
 }
 
 const char *levitate_state(void)

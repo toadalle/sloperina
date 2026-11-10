@@ -95,8 +95,8 @@ void pause_menu_release(void)
   if (!owned_count)
     return;
   uint32_t id;
-  if (!sys_read32(owned_entry + PAUSE_TYPE_ID, &id) || id != GAME_PAUSE_ID ||
-      !sys_mapped((uintptr_t)owned_count, sizeof(uint32_t), SYS_PERM_R | SYS_PERM_W)) {
+  if (find_game_pause() != owned_entry || !sys_read32(owned_entry + PAUSE_TYPE_ID, &id) ||
+      id != GAME_PAUSE_ID) {
     log_printf("menu pause: GamePause entry changed; refusing stale write");
   } else if (!adjust_count(owned_count, -1)) {
     log_printf("menu pause: GamePause count already zero");
@@ -116,7 +116,11 @@ bool pause_menu_owned(void)
  * an absent/invalid table must not be interpreted as an active transition.
  * The game can raise these only after the exit has begun, so this is a
  * safety handoff rather than a replacement for a transition callback. */
-bool pause_transition_active(void)
+static const uint32_t transition_ids[] = {
+  LOADING_PAUSE_ID, SCENE_TRANSITION_ID, EVENT_BANC_CHANGE_ID, SYSTEM_LOADING_PAUSE_ID,
+};
+
+static bool read_transition_pauses(uint32_t *counts)
 {
   if (!z64hd_game || !z64hd_game->pause_mgr_ptr)
     return false;
@@ -129,14 +133,34 @@ bool pause_transition_active(void)
     return false;
   for (uint32_t i = 0; i < n; i++) {
     uintptr_t entry = table + (uintptr_t)i * PAUSE_TYPE_SIZE;
-    uint32_t id, count;
-    if (!sys_read32(entry + PAUSE_TYPE_ID, &id) ||
-        !sys_read32(entry + PAUSE_TYPE_COUNT, &count))
+    uint32_t id;
+    if (!sys_read32(entry + PAUSE_TYPE_ID, &id))
       return false;
-    if ((id == LOADING_PAUSE_ID || id == SCENE_TRANSITION_ID ||
-         id == EVENT_BANC_CHANGE_ID || id == SYSTEM_LOADING_PAUSE_ID) &&
-        (count & PAUSE_COUNT_MASK))
-      return true;
+    for (unsigned j = 0; j < sizeof(transition_ids) / sizeof(transition_ids[0]); j++) {
+      if (id != transition_ids[j])
+        continue;
+      uint32_t count;
+      if (!sys_read32(entry + PAUSE_TYPE_COUNT, &count))
+        return false;
+      count &= PAUSE_COUNT_MASK;
+      if (counts)
+        counts[j] = count;
+      else if (count)
+        return true;
+      break;
+    }
   }
-  return false;
+  return counts != 0;
+}
+
+bool pause_transition_active(void)
+{
+  return read_transition_pauses(0);
+}
+
+bool pause_transition_counts(uint32_t counts[4])
+{
+  for (unsigned i = 0; i < 4; i++)
+    counts[i] = UINT32_MAX; /* entry unavailable */
+  return read_transition_pauses(counts);
 }

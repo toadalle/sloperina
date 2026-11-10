@@ -5,6 +5,14 @@
 
 /* Temporary collision bypass for Link only. All operations resolve the current
  * controller again; a lost/replaced controller fails closed without stale writes. */
+typedef struct {
+  uintptr_t actor, property, body, pending;
+  vec3f_t velocity;
+  uint64_t body_flags;
+  bool no_hit;
+} cct_snapshot_t;
+bool cct_snapshot(cct_snapshot_t *out);
+
 bool cct_noclip_begin(void);
 bool cct_noclip_move(const vec3f_t *position);
 void cct_noclip_end(void);

@@ -89,7 +89,7 @@ void menu_end_group(menu_t *m);
 
 /* the open menu (NULL = closed) */
 extern menu_t *menu_current;
-extern bool menu_pause_world; /* default true */
+extern bool menu_pause_world; /* default off: native GamePause can hide actors */
 void menu_set_pause_world(bool on);
 void menu_open(menu_t *root);
 void menu_close(void);

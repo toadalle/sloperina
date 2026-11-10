@@ -28,7 +28,7 @@ bool airwalls_shown, airwalls_all;
 #define MAX_POINTS 4096
 #define MAX_EDGES 8192
 #define MAX_DOTS 3000
-#define MAX_DOTS_PER_EDGE 2000
+#define MAX_RECTS_PER_EDGE 64
 #define REF_WIDTH 1920    /* the picture is worked out in pixels of a 1920x1080 one */
 #define REF_HEIGHT 1080
 #define DOT_SPACING 6.0f  /* reference pixels between dots */
@@ -393,9 +393,10 @@ static void add_line(aw_dot_t *out, int *n, float x0, float y0, float x1, float 
   float abs_dx = dx < 0 ? -dx : dx, abs_dy = dy < 0 ? -dy : dy;
   bool level = abs_dx >= abs_dy;
   float major = level ? abs_dx : abs_dy, minor = level ? abs_dy : abs_dx;
-  if (minor <= major * STRAIGHT) {
-    /* pieces along the main direction, each at most LINE_WIDTH off the next */
-    int pieces = (int)(minor / LINE_WIDTH) + 1;
+  int pieces = (int)(minor / LINE_WIDTH) + 1;
+  if (minor <= major * STRAIGHT && pieces <= MAX_RECTS_PER_EDGE) {
+    /* Solid runs only if they fit the edge budget. Close-up edges otherwise
+     * use evenly spaced dots so one side cannot consume the rest of a volume. */
     for (int i = 0; i < pieces && *n < MAX_DOTS; i++) {
       float ta = (float)i / pieces, tb = (float)(i + 1) / pieces, t_mid = (ta + tb) / 2;
       float ax, ay, bx, by;
@@ -413,8 +414,8 @@ static void add_line(aw_dot_t *out, int *n, float x0, float y0, float x1, float 
     return;
   }
   int steps = (int)(major / DOT_SPACING);
-  if (steps > MAX_DOTS_PER_EDGE)
-    steps = MAX_DOTS_PER_EDGE;
+  if (steps >= MAX_RECTS_PER_EDGE)
+    steps = MAX_RECTS_PER_EDGE - 1;
   for (int i = 0; i <= steps && *n < MAX_DOTS; i++) {
     float t = steps ? (float)i / steps : 0;
     float x = x0 + dx * t, y = y0 + dy * t;
@@ -520,24 +521,30 @@ static int sort_near_walls(const view_cam_t *cam)
   return count;
 }
 
-void airwall_frame(void)
+void airwall_frame(bool menu_open)
 {
   update_map();
   check_link();
   int next = published == 0 ? 1 : 0;
   int n = 0;
   n_walls_near = 0;
-  bool draw = airwalls_shown && current_map && !game_is_paused();
+  bool draw = airwalls_shown && current_map && !menu_open && !game_is_paused();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
     /* nearest wall first, so the dot budget goes to what's close */
     n_walls_near = sort_near_walls(&cam);
     for (int k = 0; k < n_walls_near && n < MAX_DOTS; k++) {
       int i = near_order[k];
+      /* Publish a whole visible volume or stop at the last complete one. */
+      int start = n;
       const airwall_t *wall = map_wall(i);
       uint8_t color = i == link_wall ? AW_INSIDE : wall->kind == WALL_KIND_BLOCKS ? AW_BLOCKS : AW_OTHER;
-      for (int e = wall_geo[i].first_edge; e < wall_geo[i].first_edge + wall_geo[i].n_edges; e++)
+      for (int e = wall_geo[i].first_edge; n < MAX_DOTS && e < wall_geo[i].first_edge + wall_geo[i].n_edges; e++)
         add_edge_dots(dots[next], &n, &cam, points[edges[e][0]], points[edges[e][1]], color);
+      if (n == MAX_DOTS) {
+        n = start;
+        break;
+      }
     }
   }
   n_dots[next] = n;

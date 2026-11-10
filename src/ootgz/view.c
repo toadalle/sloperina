@@ -26,7 +26,7 @@ bool view_camera(view_cam_t *cam)
     return false;
   float f[3] = { look[0] - pos[0], look[1] - pos[1], look[2] - pos[2] };
   float f_len = sqrtf(f[0] * f[0] + f[1] * f[1] + f[2] * f[2]);
-  if (f_len < 1e-4f)
+  if (!(f_len >= 1e-4f && f_len < 1000000.0f))
     return false;
   for (int i = 0; i < 3; i++) {
     cam->pos[i] = pos[i];
@@ -34,7 +34,7 @@ bool view_camera(view_cam_t *cam)
   }
   float r[3] = { -cam->forward[2], 0, cam->forward[0] }; /* forward x world up */
   float r_len = sqrtf(r[0] * r[0] + r[2] * r[2]);
-  if (r_len < 1e-4f)
+  if (!(r_len >= 1e-4f))
     return false;
   cam->right[0] = r[0] / r_len;
   cam->right[1] = 0;

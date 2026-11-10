@@ -18,6 +18,7 @@ static int velocity_resets, velocity_stops, distance_resets;
 static bool on_ground;
 static bool transition_active;
 bool pause_transition_active(void) { return transition_active; }
+bool pause_menu_owned(void) { return false; }
 bool cct_reset_vertical_velocity(uintptr_t a) { (void)a; velocity_resets++; return controller_available; }
 bool cct_stop_velocity(uintptr_t a) { (void)a; velocity_stops++; return controller_available; }
 bool cct_clear_fall_distance(uintptr_t a) { (void)a; distance_resets++; return controller_available; }
@@ -86,6 +87,7 @@ static void start(bool walls)
   pressed = 0;
   stick_x = 0;
   record = (uintptr_t)physics;
+  record_actor = link_actor();
   record_has_motion = false;
   search_state = SEARCH_READY;
   sync_drawn();
@@ -152,6 +154,40 @@ static void test_release(void)
     assert(!floating && !moving_link && !memcmp(before, physics, sizeof(before)));
   }
   puts("PASS: L3 controller reset once, long-drop landing protection, no later clamp; invalid records untouched");
+}
+
+static void test_idle_and_respawn(void)
+{
+  start(true);
+  float_clock = 1;
+  for (int i = 0; i < 30; i++)
+    step();
+  held = BTN_X;
+  levitate_move_speed = 20;
+  for (int i = 0; i < 15; i++)
+    step();
+  assert(vel_y > 13 && physics[1] > 102);
+
+  physics[1] -= 100; /* same actor, record and draw both moved by respawn */
+  sync_drawn();
+  levitate_frame(false);
+  assert(!floating && !controller_active && !record && search_state == SEARCH_IDLE);
+  assert(physics[1] < 10); /* old ghost target did not overwrite the spawn */
+  puts("PASS: ghost resumes after idle, vertical speed scales, respawn releases ownership");
+}
+
+static void test_reset_speed(void)
+{
+  for (int reset = 0; reset < 2; reset++) {
+    start(false);
+    drop();
+    levitate_reset_speed = reset != 0;
+    levitate_move_speed = 20;
+    pressed = BTN_LSTICK;
+    levitate_frame(false);
+    assert(floating && levitate_move_speed == (reset ? 6 : 20));
+  }
+  puts("PASS: each hover resets speed when enabled and retains it when disabled");
 }
 
 static void test_vertical_controls(void)
@@ -485,6 +521,8 @@ int main(void)
   test_vertical_controls();
   test_ghost_toggle();
   test_flight_speed_buttons();
+  test_idle_and_respawn();
+  test_reset_speed();
   test_transition_handoff();
   test_walk_wall_shortcut();
   test_controller_path();

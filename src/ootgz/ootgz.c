@@ -327,7 +327,7 @@ static void frame(void)
     watches_sync();
     menu_draw();
   }
-  airwall_frame();
+  airwall_frame(menu_current != 0);
   enemyhp_frame();
   menus_research_frame();
   watches_frame(menu_current != 0);

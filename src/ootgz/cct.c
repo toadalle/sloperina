@@ -22,7 +22,7 @@ static bool writable(uintptr_t p, size_t size)
   return p && !(p & 7) && sys_mapped(p, size, SYS_PERM_R | SYS_PERM_W);
 }
 
-static bool resolve(controller_t *out)
+static bool resolve_body(controller_t *out)
 {
   /* not known for this build: nothing to call */
   if (!z64hd_game || !Z64HD_VT_CCT_PROPERTY || !Z64HD_VT_CCT_BODY || !Z64HD_CCT_FORCE_NO_HIT ||
@@ -36,9 +36,20 @@ static bool resolve(controller_t *out)
   if (!writable(p, 0x60) || !writable(body, 0x320) ||
       sys_ptr(p) != MAIN(Z64HD_VT_CCT_PROPERTY) || sys_ptr(body) != MAIN(Z64HD_VT_CCT_BODY))
     return false;
+  uintptr_t pending = next(body, 0x60);
+  if (pending && !writable(pending, 0x108))
+    return false;
+  *out = (controller_t){ actor, p, body };
+  return true;
+}
+
+static bool resolve(controller_t *out)
+{
+  if (!resolve_body(out))
+    return false;
   /* Position setting visits the controller's attached-body lists. Do not call it
    * during partial construction/teardown or with an unreadable list. */
-  uintptr_t lists = next(p, 0x58);
+  uintptr_t lists = next(out->property, 0x58);
   if (!writable(lists, 0x60))
     return false;
   for (unsigned off = 0x10; off <= 0x50; off += 0x10) {
@@ -52,10 +63,6 @@ static bool resolve(controller_t *out)
       if (!writable(sys_ptr(entries + i * sizeof(uintptr_t)), off == 0x10 ? 0x320 : 0x38))
         return false;
   }
-  uintptr_t pending = next(body, 0x60);
-  if (pending && !writable(pending, 0x108))
-    return false;
-  *out = (controller_t){ actor, p, body };
   return true;
 }
 
@@ -72,6 +79,23 @@ static bool no_hit(uintptr_t body)
   if (pending && (*(volatile uint64_t *)(pending + 0x100) & (1ull << 19)))
     return (*(volatile uint32_t *)(pending + 0xF8) & 1) != 0;
   return (*(volatile uint64_t *)(body + 0x70) & (1ull << 11)) != 0;
+}
+
+bool cct_snapshot(cct_snapshot_t *out)
+{
+  controller_t current;
+  if (!resolve_body(&current))
+    return false;
+  *out = (cct_snapshot_t){
+    .actor = current.actor,
+    .property = current.property,
+    .body = current.body,
+    .pending = next(current.body, 0x60),
+    .velocity = *(volatile vec3f_t *)(current.body + 0xE0),
+    .body_flags = *(volatile uint64_t *)(current.body + 0x70),
+    .no_hit = no_hit(current.body),
+  };
+  return true;
 }
 
 static void set_no_hit(uintptr_t body, bool enabled)
@@ -188,7 +212,13 @@ void cct_noclip_end(void)
   if (!owner.body)
     return;
   controller_t current;
-  if (!resolve(&current)) {
+  uintptr_t actor = link_actor();
+  if (actor && actor != owner.actor) {
+    log_printf("levitate: Link replaced; discarded old collision owner");
+    owner = (controller_t){0};
+    return;
+  }
+  if (!resolve_body(&current)) {
     if (!restore_wait_logged)
       log_printf("levitate: controller unavailable; collision restore pending");
     restore_wait_logged = true;

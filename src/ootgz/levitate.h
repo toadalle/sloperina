@@ -1,16 +1,22 @@
 /* Hover: L3 toggles it, R3 toggles ghost collision while hovering, X/B rise/descend,
- * Y/A lower/raise horizontal flight speed one preset per press,
+ * Y/A lower/raise flight speed one preset per press,
  * and release holds altitude. Left stick moves horizontally but is hidden from the
  * game's normal movement state machine while hover owns Link. */
 #ifndef LEVITATE_H
 #define LEVITATE_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+/* Validated positions and motion fields only, for user-triggered diagnostics. */
+uintptr_t levitate_record_snapshot(void *out, size_t capacity, size_t *size);
 
 extern bool levitate_enabled;
+extern bool levitate_reset_speed;
 extern bool levitate_through_walls;
-extern int levitate_speed;        /* X/B units/s; legacy 0 uses 4, idle always hovers */
-extern int levitate_move_speed;   /* left stick, units per second */
+extern int levitate_speed;        /* X/B units/s at preset 6; legacy 0 uses 4 */
+extern int levitate_move_speed;   /* horizontal units/s and vertical speed multiplier */
 
 void levitate_frame(bool menu_open);
 const char *levitate_state(void); /* for watches/menus */

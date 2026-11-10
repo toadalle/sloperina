@@ -82,6 +82,7 @@ typedef struct {
   int32_t levitate;
   int32_t levitate_speed;
   int32_t levitate_move;
+  int32_t levitate_reset_speed;
   int32_t levitate_walls;
   int32_t airwalls_shown;
   int32_t airwalls_all;
@@ -138,6 +139,7 @@ static snapshot_t take_snapshot(void)
   s.levitate = levitate_enabled;
   s.levitate_speed = levitate_speed;
   s.levitate_move = levitate_move_speed;
+  s.levitate_reset_speed = levitate_reset_speed;
   s.levitate_walls = levitate_through_walls;
   s.airwalls_shown = airwalls_shown;
   s.airwalls_all = airwalls_all;
@@ -202,6 +204,7 @@ static void apply_snapshot(const snapshot_t *s)
     levitate_speed = s->levitate_speed;
   if (s->levitate_move > 0 && s->levitate_move <= LEVITATE_SPEED_MAX)
     levitate_move_speed = s->levitate_move;
+  levitate_reset_speed = s->levitate_reset_speed != 0;
   levitate_through_walls = s->levitate_walls != 0;
   airwalls_shown = s->airwalls_shown != 0;
   airwalls_all = s->airwalls_all != 0;
@@ -260,7 +263,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("watch_y", watch_y),
   INT_KEY("opacity", opacity),
   INT_KEY("menu_size", menu_scale),
-  INT_KEY("menu_pause_world", menu_pause_world),
+  INT_KEY("practice_menu_pause", menu_pause_world),
   INT_KEY("frame_advance", frame_advance),
   INT_KEY("pause_display", pause_display),
   INT_KEY("frame_advance_button", frame_advance_button),
@@ -273,6 +276,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("levitate", levitate),
   INT_KEY("levitate_speed", levitate_speed),
   INT_KEY("levitate_move_speed", levitate_move),
+  INT_KEY("levitate_reset_speed", levitate_reset_speed),
   INT_KEY("levitate_through_walls", levitate_walls),
   INT_KEY("airwalls_shown", airwalls_shown),
   INT_KEY("airwalls_all", airwalls_all),
@@ -441,16 +445,16 @@ static void save_settings_file(const snapshot_t *s)
   int n = snprintf(buf, sizeof(buf),
                    "cheats=%u\nwatch_list=%s\nwatches_shown=%d\nwatch_position=%d\nwatch_x=%d\nwatch_y=%d\nopacity=%d\n"
                    "arrival_cutscenes=%d\nlevitate=%d\nlevitate_speed=%d\nlevitate_move_speed=%d\n"
-                   "levitate_through_walls=%d\nairwalls_shown=%d\nairwalls_all=%d\nenemy_health=%d\n",
+                   "levitate_reset_speed=%d\nlevitate_through_walls=%d\nairwalls_shown=%d\nairwalls_all=%d\nenemy_health=%d\n",
                    (unsigned)s->cheats, list, (int)s->watches_shown, (int)s->watch_position,
                    (int)s->watch_x, (int)s->watch_y,
                    (int)s->opacity, (int)s->arrival_cutscenes, (int)s->levitate, (int)s->levitate_speed,
-                   (int)s->levitate_move, (int)s->levitate_walls, (int)s->airwalls_shown, (int)s->airwalls_all,
+                   (int)s->levitate_move, (int)s->levitate_reset_speed, (int)s->levitate_walls, (int)s->airwalls_shown, (int)s->airwalls_all,
                    (int)s->enemy_hp);
   if (n < (int)sizeof(buf))
     n += snprintf(buf + n, sizeof(buf) - n,
                   "language=%s\nframe_advance=%d\nframe_advance_button=%d\npause_display=%d\nmenu_size=%d\n"
-                  "menu_pause_world=%d\ninput_display=%d\ninput_display_background=%d\ninput_display_parts=%d\n"
+                  "practice_menu_pause=%d\ninput_display=%d\ninput_display_background=%d\ninput_display_parts=%d\n"
                   "input_display_style=%d\ninput_display_size=%d\n",
                   s->lang, (int)s->frame_advance, (int)s->frame_advance_button, (int)s->pause_display,
                   (int)s->menu_scale, (int)s->menu_pause_world, (int)s->input_display, (int)s->input_display_bg,

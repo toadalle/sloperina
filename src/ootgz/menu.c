@@ -15,7 +15,7 @@ static int pool_used;
 
 menu_t *menu_current;
 static menu_t *menu_last; /* where the menu was when it closed; it reopens there */
-bool menu_pause_world = true;
+bool menu_pause_world;
 static bool menu_pause_owned;
 
 void menu_init(menu_t *menu, const char *title, int cap)
@@ -846,8 +846,6 @@ void menu_draw(void)
   menu_t *menu = menu_current;
   if (!menu)
     return;
-  /* Use the existing safe text renderer for a spacious two-column dashboard.
-   * This is deliberately not a claim of native card/rounded-rectangle support. */
   if (!menu->parent && menu->n_items == 9 && menu->items[0].kind == MI_SUBMENU) {
     static const char *const descriptions[8] = {
       "Position and player", "Movement and cheats",
@@ -856,20 +854,21 @@ void menu_draw(void)
       "Watches and diagnostics", "Display and controls"
     };
     gfx_begin();
-    gfx_text(3, 1, GFX_TITLE, "SLOPERINAGZ  /  PRACTICE MENU");
-    gfx_text(3, 2, GFX_DIM, menu_pause_world ? "WORLD PAUSED" : "LIVE INSPECTION");
-    gfx_text(3, 3, GFX_DIM, "--------------------------------------------------------");
+    gfx_dashboard(menu->selected);
+    gfx_text(2, 0, GFX_DIM, "SLOPERINAGZ");
+    gfx_text(2, 2, GFX_TITLE, "PRACTICE MENU");
+    gfx_text(55, 2, menu_pause_owned ? GFX_NOTICE : GFX_TITLE, menu_pause_owned ? "PAUSED" : "LIVE");
     for (int i = 0; i < 8; i++) {
-      int col = (i & 1) ? 33 : 4;
-      int row = 5 + (i / 2) * 4;
-      char label[64];
-      snprintf(label, sizeof(label), "%c %s  >", i == menu->selected ? '>' : ' ', T(menu->items[i].label));
-      gfx_text(col, row, i == menu->selected ? GFX_SELECTED : GFX_NORMAL, label);
+      int col = GFX_CARD_COL + 2 + (i & 1) * GFX_CARD_PITCH_X;
+      int row = GFX_CARD_ROW + 1 + (i / 2) * GFX_CARD_PITCH_Y;
+      char label[32];
+      snprintf(label, sizeof(label), "%c %.22s", i == menu->selected ? '>' : ' ', T(menu->items[i].label));
+      gfx_text(col, row, i == menu->selected ? GFX_TITLE : GFX_NORMAL, label);
       gfx_text(col + 2, row + 1, GFX_DIM, descriptions[i]);
     }
     gfx_text(4, 22, menu->selected == 8 ? GFX_SELECTED : GFX_NORMAL,
              menu->selected == 8 ? "> Close" : "  Close");
-    gfx_text(4, 24, GFX_DIM, "D-pad: Navigate   A: Select   B: Back   R + Plus: Close");
+    gfx_text(2, 24, GFX_DIM, "D-PAD  Move     A  Select     B  Back     R + PLUS  Close");
     gfx_end();
     return;
   }

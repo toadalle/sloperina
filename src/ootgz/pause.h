@@ -2,9 +2,12 @@
 #ifndef PAUSE_H
 #define PAUSE_H
 #include <stdbool.h>
+#include <stdint.h>
 bool pause_menu_acquire(void);
 void pause_menu_release(void);
 bool pause_menu_owned(void);
 /* Read-only: true only when a known native loading/transition pause type has an active request. */
 bool pause_transition_active(void);
+/* LoadingPause, SceneTransition, EventBancChangePause, SystemPauseWhileLoading. */
+bool pause_transition_counts(uint32_t counts[4]);
 #endif

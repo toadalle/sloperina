@@ -19,9 +19,9 @@ jobs:
       - name: Upload Fritchii test build
         uses: actions/upload-artifact@v4
         with:
-          name: sloperina-stage1-${{ github.sha }}
+          name: sloperina-fritchii-${{ github.sha }}
           path: |
             dist/
             INSTALLATION.md
-            docs/STAGE1_STATUS.md
+            docs/FRITCHII_TESTING.md
           retention-days: 7

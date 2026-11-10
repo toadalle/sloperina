@@ -16,6 +16,12 @@
 #define GFX_COLS 64
 #define GFX_ROWS 26
 #define GFX_PANELS 4
+/* Dashboard cards, in text cells. */
+#define GFX_CARD_COL 2
+#define GFX_CARD_ROW 4
+#define GFX_CARD_WIDTH 29
+#define GFX_CARD_PITCH_X 31
+#define GFX_CARD_PITCH_Y 4
 #define GFX_PANEL_LOG 2
 #define GFX_PANEL_INPUT 3 /* gz's input display: the stick and the buttons held, bottom-left, no background */
 #define GFX_LOG_MAX 4 /* lines, as gz's SETTINGS_LOG_MAX */
@@ -66,6 +72,7 @@ typedef struct {
   int16_t  x, y;                      /* GFX_CUSTOM: where, in thousandths of the picture */
   bool     clear;                     /* no background (the log; the input display unless it has one) */
   bool     fullscreen;                /* menu: reserve the renderer's full menu canvas */
+  uint8_t  dashboard;                 /* selected item + 1; 0 for a regular text panel */
   uint8_t  pad;                       /* input display: 1 = the controller drawing (nvn.c pad_pixel) */
   int8_t   sticks[4];                 /* ... left x, y, right x, y, -100..100 */
   uint8_t  clicks;                    /* ... bit 0 L3, bit 1 R3, bits 2..5 d-pad up, down, left, right */
@@ -77,6 +84,7 @@ typedef struct { gfx_panel_t panel[GFX_PANELS]; } gfx_screen_t;
 
 /* game thread: the menu (panel 0) */
 void gfx_begin(void);
+void gfx_dashboard(int selection);
 void gfx_text(int col, int row, gfx_style_t style, const char *s);
 void gfx_end(void);
 void gfx_clear(void);            /* menu closed */
@@ -88,7 +96,7 @@ void gfx_splash(const char *const *lines, const uint8_t *styles, const uint8_t *
 void gfx_logf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 extern volatile uint32_t gfx_log_count; /* lines logged so far */
 /* game thread: watches (panel 1), drawn this frame only */
-void gfx_hud(gfx_corner_t corner, int row, gfx_style_t style, const char *s);
+void gfx_hud(gfx_corner_t corner, int col, int row, gfx_style_t style, const char *s);
 void gfx_hud_at(int x_permille, int y_permille); /* for GFX_CUSTOM */
 /* game thread: the input display (panel 3), drawn this frame only */
 void gfx_input(int col, int row, gfx_style_t style, const char *s);

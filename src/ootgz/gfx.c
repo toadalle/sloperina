@@ -58,6 +58,11 @@ void gfx_begin(void)
   menu_open = true;
 }
 
+void gfx_dashboard(int selection)
+{
+  menu_panel.dashboard = (uint8_t)(selection + 1);
+}
+
 void gfx_text(int col, int row, gfx_style_t style, const char *s)
 {
   put_text(&menu_panel, col, row, style, s);
@@ -239,11 +244,11 @@ void gfx_hud_at(int x_permille, int y_permille)
   hud_panel.y = (int16_t)y_permille;
 }
 
-void gfx_hud(gfx_corner_t corner, int row, gfx_style_t style, const char *s)
+void gfx_hud(gfx_corner_t corner, int col, int row, gfx_style_t style, const char *s)
 {
   hud_panel.corner = corner;
   hud_panel.yoff = 1; /* text in the middle of the panel (nvn.c TEXT_TOP) */
-  put_text(&hud_panel, 0, row, style, s);
+  put_text(&hud_panel, col, row, style, s);
 }
 
 /* --- log fallback (until drawing works) ------------------------------------------------- */
@@ -334,6 +339,7 @@ static void measure_panel(gfx_panel_t *panel)
                   (uint32_t)panel->fullscreen << 9; /* geometry/background changes */
   hash = hash_mix(hash, (uint32_t)panel->pad << 9 ^ (uint32_t)panel->clicks << 10 ^
                           (uint32_t)(uint8_t)panel->yoff << 12 ^ (uint32_t)panel->scale_pct << 16);
+  hash = hash_mix(hash, panel->dashboard);
   for (int i = 0; i < 4; i++) /* the sticks are drawn from these */
     hash = hash_mix(hash, (uint8_t)panel->sticks[i]);
   for (int r = 0; r < GFX_ROWS; r++)
