@@ -860,10 +860,13 @@ void watches_frame(bool menu_open)
     gfx_hud_at(watches_x, watches_y);
   char line[64], value[48];
   int row = 0;
+  bool show_flight_speed = false;
   for (int i = 0; i < watch_count; i++) {
     char label[24];
     if (watch_list[i].hidden)
       continue;
+    if (watch_list[i].id == W_SPEED)
+      show_flight_speed = true;
     watch_entry_display_label(&watch_list[i], label, sizeof(label));
     watch_entry_text(&watch_list[i], value, sizeof(value));
     snprintf(line, sizeof(line), "%-12.12s %.40s", label, value);
@@ -871,6 +874,8 @@ void watches_frame(bool menu_open)
   }
   /* Display the selected horizontal hover speed, separately from the measured
    * world-space "speed" watch above. Do not change saved watch IDs or order. */
-  snprintf(line, sizeof(line), "%-12s %d", "flight speed", levitate_move_speed);
-  gfx_hud((gfx_corner_t)watches_corner, row, GFX_NORMAL, line);
+  if (show_flight_speed) {
+    snprintf(line, sizeof(line), "%-12s %d", "flight speed", levitate_move_speed);
+    gfx_hud((gfx_corner_t)watches_corner, row, GFX_NORMAL, line);
+  }
 }
