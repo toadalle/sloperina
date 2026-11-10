@@ -290,8 +290,8 @@ void diagnostics_dump(bool deep)
   unsigned cheat_bits = 0;
   for (int i = 0; i < CHEAT_COUNT; i++)
     cheat_bits |= (unsigned)cheats[i] << i;
-  append("Levitate=%s enabled=%d ghost=%d preset=%d base-rise=%d cct-owned=%d cheats=%#x\n",
-         levitate_state(), levitate_enabled, levitate_through_walls, levitate_move_speed,
+  append("Levitate=%s enabled=%d ghost=%d ghost-default=%d preset=%d base-rise=%d cct-owned=%d cheats=%#x\n",
+         levitate_state(), levitate_enabled, levitate_through_walls, levitate_ghost_default, levitate_move_speed,
          levitate_speed, cct_noclip_active(), cheat_bits);
   bool paused;
   int32_t requests;

@@ -56,8 +56,12 @@ bool sys_read32(uintptr_t a, uint32_t *v)
 void log_printf(const char *fmt, ...) { (void)fmt; }
 static void fake_no_hit(uintptr_t body, bool on)
 {
-  assert(body == A(6));
+  assert(body == A(6) || body == A(9));
   toggles++;
+  if (body == A(9)) {
+    putp(9, 0x70, on ? 1ull << 11 : 0);
+    return;
+  }
   putp(8, 0x100, 1ull << 19);
   put32(8, 0xF8, on); /* queued state, applied body flag deliberately stays unchanged */
 }
@@ -72,6 +76,8 @@ static void fake_velocity(uintptr_t body, const vec3f_t *v)
 static void reset(void)
 {
   memset(objects, 0, sizeof(objects));
+  memset(restores, 0, sizeof(restores));
+  active_restore = -1;
   owner = (controller_t){0}; actor = A(0); blocked = 0; read_only = false;
   toggles = moves = velocity_resets = 0;
   putp(0, 0x270, A(1)); putp(1, 0x50, A(2)); putp(2, 0x20, A(3));
@@ -150,22 +156,22 @@ int main(void)
   reset(); put32(4, 0x10, 129); assert(!cct_noclip_begin());
   reset(); putp(1, 0x50, UINTPTR_MAX); assert(!cct_noclip_begin());
   reset(); assert(cct_noclip_begin());
-  blocked = A(1); assert(!cct_noclip_move(&p)); cct_noclip_end();
-  assert(cct_noclip_active() && toggles == 1); /* retry temporary unavailability */
-  blocked = 0; cct_noclip_end(); assert(!cct_noclip_active() && toggles == 2);
-  /* A traversal controller briefly takes over, then the same Link's normal
-   * body returns under a different property wrapper. Restore the saved flag. */
+  blocked = A(1); assert(!cct_noclip_move(&p));
+  assert(!cct_noclip_end() && !cct_noclip_active() && toggles == 1);
+  blocked = 0; assert(cct_noclip_end() && toggles == 2);
+  /* A temporary body never returns during the next hover. The replacement
+   * can use normal collision or independently acquire ghost ownership. */
   reset(); assert(cct_noclip_begin());
-  putp(4, 8, A(7));
-  putp(7, 0, MAIN(Z64HD_VT_CCT_PROPERTY));
-  putp(7, 0x20, A(9)); putp(7, 0x58, A(4));
+  putp(5, 0x20, A(9));
   putp(9, 0, MAIN(Z64HD_VT_CCT_BODY));
-  cct_noclip_end();
-  assert(cct_noclip_active() && toggles == 1);
-  putp(7, 0x20, A(6));
+  assert(cct_noclip_end() && !cct_noclip_active() && toggles == 1);
+  assert(no_hit(A(6)) && !no_hit(A(9)));
+  assert(cct_noclip_begin() && no_hit(A(9)) && toggles == 2);
+  putp(5, 0x20, A(6));
   assert(!cct_noclip_begin() && !cct_noclip_move(&p));
-  cct_noclip_end();
-  assert(!cct_noclip_active() && toggles == 2 && !no_hit(A(6)));
+  assert(cct_noclip_end() && !cct_noclip_active() && toggles == 3 && !no_hit(A(6)));
+  putp(5, 0x20, A(9));
+  assert(cct_noclip_end() && toggles == 4 && !no_hit(A(9)));
   reset(); assert(cct_noclip_begin());
   actor = A(0) + 8; putp(0, 0x278, A(1)); /* new actor, same-looking reused controller */
   assert(!cct_noclip_move(&p)); cct_noclip_end();

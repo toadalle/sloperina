@@ -2066,12 +2066,12 @@ static void set_levitate(menu_item_t *it, bool on)
 
 static bool get_walls(menu_item_t *it)
 {
-  return levitate_through_walls;
+  return levitate_ghost_default;
 }
 
 static void set_walls(menu_item_t *it, bool on)
 {
-  levitate_through_walls = on;
+  levitate_ghost_default = on;
 }
 
 static int get_lev_speed(menu_item_t *it)
@@ -2196,9 +2196,9 @@ static void build_levitate(void)
   menu_item_t *lv = menu_add_check(&m_levitate, "enabled", get_levitate, set_levitate, 0);
   if (lv)
     lv->hint = "L3: hover   R3: ghost   X/B: height   Y/A: slower/faster", lv->log_label = "levitate";
-  menu_item_t *walls = menu_add_check(&m_levitate, "through walls", get_walls, set_walls, 0);
+  menu_item_t *walls = menu_add_check(&m_levitate, "start hover in ghost mode", get_walls, set_walls, 0);
   if (walls)
-    walls->hint = "Ghost collision state while hovering; R3 is the normal toggle";
+    walls->hint = "Applies each time L3 starts hover. R3 toggles the current session";
   menu_item_t *rise = menu_add_option(&m_levitate, "base rise speed", 7, lev_speed_names, get_lev_speed, set_lev_speed, 0);
   if (rise)
     rise->hint = "X/B speed at flight preset 6. Legacy 0 uses 4";

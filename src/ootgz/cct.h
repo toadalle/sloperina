@@ -15,7 +15,7 @@ bool cct_snapshot(cct_snapshot_t *out);
 
 bool cct_noclip_begin(void);
 bool cct_noclip_move(const vec3f_t *position);
-void cct_noclip_end(void);
+bool cct_noclip_end(void); /* false while the current body cannot be identified for a pending restore */
 bool cct_noclip_active(void);
 
 /* Resolve on every call. These work with collision enabled as well. */

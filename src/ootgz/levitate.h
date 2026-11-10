@@ -15,6 +15,7 @@ uintptr_t levitate_record_snapshot(void *out, size_t capacity, size_t *size);
 extern bool levitate_enabled;
 extern bool levitate_reset_speed;
 extern bool levitate_through_walls;
+extern bool levitate_ghost_default;
 extern int levitate_speed;        /* X/B units/s at preset 6; legacy 0 uses 4 */
 extern int levitate_move_speed;   /* horizontal units/s and vertical speed multiplier */
 

@@ -29,6 +29,9 @@ available on 1.0.0 where the corresponding fields can be read.
    The base rise speed is the X/B speed at preset 6. Change Settings →
    Reset flight speed on hover toggle. Confirm that speed resets on both L3
    edges when enabled and is retained on both edges when disabled.
+   In Cheats → Levitate, enable **Start hover in ghost mode**. Start with L3,
+   turn ghost off with R3, then drop and start again. Ghost should start on
+   both times. Repeat with the setting disabled and after reloading the ROM.
 3. **Recovery.** Hover in place for several seconds in normal and ghost mode,
    then move. In ghost mode, void out, wait until gameplay is back, and press
    L3 again. Repeat around a natural scene exit, including with a record search
@@ -51,8 +54,9 @@ available on 1.0.0 where the corresponding fields can be read.
    another Quick Snapshot, followed by Deep Diagnostics. Include the map,
    route, controls and expected behavior with the two captures.
    If a traversal action briefly swaps Link's controller, check that the log
-   records a deferred collision restore followed by restore to the original
-   mode when the original body returns. Test ordinary walking separately.
+   records a deferred collision restore for the old body. After Link can
+   move again, press L3 to restart hover even if the old body has yet to return.
+   If it returns, check that its original collision mode is restored. Test ordinary walking separately.
    D-pad right + R3 toggles wall-pass. A pass now requires native ground contact
    at entry and temporarily holds height while passing.
 

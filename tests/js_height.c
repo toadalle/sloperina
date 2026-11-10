@@ -27,6 +27,7 @@ bool enemy_hp_shown;
 bool cheats[CHEAT_COUNT], frame_advance, pause_display, warp_arrival_cutscenes;
 bool levitate_enabled, levitate_through_walls, loading_zones_shown, void_zones_shown, airwalls_shown, airwalls_all;
 bool levitate_reset_speed = true;
+bool levitate_ghost_default;
 int frame_advance_button, levitate_speed = 5, levitate_move_speed = 5;
 
 static uintptr_t actor, first, player, base;
@@ -230,13 +231,15 @@ static void test_settings(void)
   assert(watch_count == 1 && watch_list[0].id == W_JS_HEIGHT);
   assert(watch_add_memory(0x10000, MW_F32) && watch_list[1].id == W_MEMORY);
   assert(!watch_add_memory(0x10000, MW_X32));
-  snprintf(settings, sizeof(settings), "levitate_speed=0\n");
+  snprintf(settings, sizeof(settings), "levitate_speed=0\nlevitate_through_walls=1\n");
   levitate_speed = 4;
   settings_load();
   assert(levitate_speed == 0);
+  assert(levitate_ghost_default && !levitate_through_walls);
   watch_set_label(0, "save hover"); /* trigger settings save */
   for (int i = 0; i < 60; i++) settings_frame(false);
   assert(strstr(settings, "levitate_speed=0\n"));
+  assert(strstr(settings, "levitate_through_walls=1\n"));
   levitate_speed = 4;
   settings_load();
   assert(levitate_speed == 0);

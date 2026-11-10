@@ -9,9 +9,13 @@
 
 typedef struct { uintptr_t actor, property, body; } controller_t;
 static controller_t owner;
-static bool original_no_hit;
-static bool restore_wait_logged;
-static bool restoring;
+/* Link can switch bodies for traversal and leave the old one detached.
+ * Keep each saved flag until that body is reachable again through Link. */
+static struct collision_restore {
+  uintptr_t actor, body;
+  bool no_hit;
+} restores[4];
+static int active_restore = -1;
 
 static uintptr_t next(uintptr_t p, size_t offset)
 {
@@ -175,19 +179,47 @@ bool cct_clear_fall_distance(uintptr_t expected_actor)
   return true;
 }
 
-bool cct_noclip_active(void) { return owner.body != 0; }
+/* Return a free slot after servicing any restores that are safe now. A
+ * detached body is never dereferenced, even if its old address is mapped. */
+static int service_restores(uintptr_t actor, uintptr_t body)
+{
+  int free_slot = -1;
+  for (int i = 0; i < (int)(sizeof(restores) / sizeof(*restores)); i++) {
+    struct collision_restore *r = &restores[i];
+    if (r->body && i != active_restore) {
+      if (actor && actor != r->actor) {
+        *r = (struct collision_restore){0};
+      } else if (actor == r->actor && body == r->body) {
+        if (no_hit(body) != r->no_hit)
+          set_no_hit(body, r->no_hit);
+        log_printf("levitate: body %#lx collision bypass restored to %d", (unsigned long)body, r->no_hit);
+        *r = (struct collision_restore){0};
+      }
+    }
+    if (!r->body)
+      free_slot = i;
+  }
+  return free_slot;
+}
+
+bool cct_noclip_active(void) { return active_restore >= 0; }
 
 bool cct_noclip_begin(void)
 {
   controller_t current;
   if (!resolve(&current))
     return false;
-  if (owner.body)
-    return !restoring && same(owner, current);
-  original_no_hit = no_hit(current.body);
+  if (cct_noclip_active())
+    return same(owner, current);
+  int slot = service_restores(current.actor, current.body);
+  if (slot < 0) {
+    log_printf("levitate: all collision restore slots are pending");
+    return false;
+  }
+  bool original_no_hit = no_hit(current.body);
+  restores[slot] = (struct collision_restore){ current.actor, current.body, original_no_hit };
+  active_restore = slot;
   owner = current;
-  restore_wait_logged = false;
-  restoring = false;
   if (!original_no_hit)
     set_no_hit(owner.body, true);
   log_printf("levitate: controller %#lx, body %#lx, collision bypass on (was %d)",
@@ -198,7 +230,7 @@ bool cct_noclip_begin(void)
 bool cct_noclip_move(const vec3f_t *position)
 {
   controller_t current;
-  if (!owner.body || restoring || !resolve(&current) || !same(owner, current) ||
+  if (!cct_noclip_active() || !resolve(&current) || !same(owner, current) ||
       !(position->x > -100000 && position->x < 100000 &&
         position->y > -100000 && position->y < 100000 &&
         position->z > -100000 && position->z < 100000))
@@ -209,28 +241,27 @@ bool cct_noclip_move(const vec3f_t *position)
   return true;
 }
 
-void cct_noclip_end(void)
+bool cct_noclip_end(void)
 {
-  if (!owner.body)
-    return;
-  restoring = true;
+  int released = active_restore;
+  active_restore = -1;
+  bool pending = false;
+  for (unsigned i = 0; i < sizeof(restores) / sizeof(*restores); i++)
+    pending |= restores[i].body != 0;
+  if (!pending)
+    return true;
+
   controller_t current;
-  uintptr_t actor = link_actor();
-  if (actor && actor != owner.actor) {
-    log_printf("levitate: Link replaced; discarded old collision owner");
-    owner = (controller_t){0};
-    return;
-  }
-  /* Traversal can temporarily substitute a controller on the same Link.
-   * Restore when the owned body returns, even if the property wrapper changed. */
-  if (!resolve_body(&current) || current.body != owner.body) {
-    if (!restore_wait_logged)
-      log_printf("levitate: controller unavailable; collision restore pending");
-    restore_wait_logged = true;
-    return; /* Retry while idle; never forget a temporarily unreadable owner. */
-  }
-  if (no_hit(owner.body) != original_no_hit)
-    set_no_hit(owner.body, original_no_hit);
-  log_printf("levitate: collision bypass restored to %d", original_no_hit);
-  owner = (controller_t){0};
+  bool resolved = resolve_body(&current);
+  service_restores(resolved ? current.actor : link_actor(), resolved ? current.body : 0);
+  if (released >= 0 && restores[released].body)
+    log_printf("levitate: body %#lx detached/unavailable; collision restore pending",
+               (unsigned long)restores[released].body);
+
+  if (resolved)
+    return true; /* Any remaining restore belongs to a different body. */
+  for (unsigned i = 0; i < sizeof(restores) / sizeof(*restores); i++)
+    if (restores[i].body)
+      return false;
+  return true;
 }

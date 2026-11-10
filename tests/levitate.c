@@ -27,7 +27,7 @@ bool cct_on_ground(uintptr_t a, bool *grounded) { (void)a; *grounded = on_ground
 bool cct_noclip_begin(void) { return controller_active = controller_available; }
 bool cct_noclip_active(void) { return controller_active; }
 bool cct_noclip_move(const vec3f_t *p) { (void)p; controller_moves++; return controller_available; }
-void cct_noclip_end(void) { if (controller_active) controller_restores++; controller_active = false; }
+bool cct_noclip_end(void) { if (controller_active) controller_restores++; controller_active = false; return true; }
 bool cheats[CHEAT_COUNT];
 uint32_t input_hide_from_game;
 uint32_t input_hide_sticks_from_game;
@@ -91,6 +91,7 @@ static void start(bool walls)
   on_ground = false;
   transition_active = false;
   levitate_through_walls = walls;
+  levitate_ghost_default = false;
   levitate_speed = 4;
   levitate_move_speed = 6;
   held = 0;
@@ -447,6 +448,19 @@ static void test_ghost_toggle(void)
   levitate_frame(false, false);
   assert(floating && !levitate_through_walls && !controller_active && controller_restores == 1);
   assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
+  drop();
+  levitate_ghost_default = true;
+  held = pressed = BTN_LSTICK;
+  levitate_frame(false, false);
+  assert(floating && moving_link && levitate_through_walls && controller_active);
+  held = pressed = BTN_RSTICK;
+  levitate_frame(false, false);
+  assert(!levitate_through_walls && levitate_ghost_default);
+  held = pressed = BTN_LSTICK;
+  levitate_frame(false, false);
+  assert(!floating && levitate_ghost_default);
+  levitate_frame(false, false);
+  assert(floating && levitate_through_walls && controller_active);
   puts("PASS: L3 hover guard, R3 ghost toggle, full velocity stop and left-stick gameplay masking");
 }
 

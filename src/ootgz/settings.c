@@ -141,7 +141,7 @@ static snapshot_t take_snapshot(void)
   s.levitate_speed = levitate_speed;
   s.levitate_move = levitate_move_speed;
   s.levitate_reset_speed = levitate_reset_speed;
-  s.levitate_walls = levitate_through_walls;
+  s.levitate_walls = levitate_ghost_default;
   s.loading_zones = loading_zones_shown;
   s.void_zones = void_zones_shown;
   s.airwalls_shown = airwalls_shown;
@@ -208,7 +208,7 @@ static void apply_snapshot(const snapshot_t *s)
   if (s->levitate_move > 0 && s->levitate_move <= LEVITATE_SPEED_MAX)
     levitate_move_speed = s->levitate_move;
   levitate_reset_speed = s->levitate_reset_speed != 0;
-  levitate_through_walls = s->levitate_walls != 0;
+  levitate_ghost_default = s->levitate_walls != 0;
   loading_zones_shown = s->loading_zones != 0;
   void_zones_shown = s->void_zones != 0;
   airwalls_shown = s->airwalls_shown != 0;

@@ -44,6 +44,7 @@ float hypotf(float x, float y); /* from sdk */
 bool levitate_enabled;
 bool levitate_reset_speed = true;
 bool levitate_through_walls;
+bool levitate_ghost_default;
 int levitate_speed = 4;       /* rise, units/s */
 #define FLIGHT_SPEED_DEFAULT 6 /* original mod flight move speed */
 int levitate_move_speed = FLIGHT_SPEED_DEFAULT;  /* stick, units/s */
@@ -936,9 +937,10 @@ static void handle_l3(bool menu_open)
       gfx_notice("levitate off");
     } else {
       floating = true;
-      levitate_through_walls = false; /* always enter hover with normal collision */
+      levitate_through_walls = levitate_ghost_default;
       quiet_search = false;
-      gfx_notice(search_state == SEARCH_READY ? "levitate on" : "hover: locating Link");
+      if (search_state != SEARCH_READY)
+        gfx_notice("hover: locating Link");
     }
   }
 }
@@ -1163,16 +1165,17 @@ static void frame(bool menu_open)
         gfx_notice("levitate: controller unavailable; stopped");
         return;
       }
-    } else {
-      cct_noclip_end();
-      if (cct_noclip_active()) {
-        drop();
-        return;
-      }
+    } else if (!cct_noclip_end()) {
+      drop();
+      gfx_notice("levitate: controller unavailable; stopped");
+      return;
     }
-    if (!moving_link)
+    bool starting = !moving_link;
+    if (starting)
       float_start();
     float_step(dt, menu_open);
+    if (starting && moving_link)
+      gfx_notice(levitate_through_walls ? "levitate on: ghost" : "levitate on");
     speed_known = false;
   } else if (want_walls) {
     walls_step(dt, want_speed); /* does 2x speed too */
