@@ -1,11 +1,23 @@
-# Collision view (shelved)
+# Collision view
 
-**Status: shelved (9th November 2026).** The collision files are fully decoded on the PC, but nothing is drawn in
-the game yet. This page is everything needed to pick it up again: the plan, what it costs, what's unknown, and the
-file format.
+**Scene > Collision > Show Static Collision Mesh** draws baked player collision
+near Link. Green edges mark floors, blue edges mark walls and pink edges mark
+ceilings. Placed loading zones and invisible barrier shapes retain their
+separate overlay toggles. The orange cross marks a recorded fall position.
 
-The goal: **scene > collision > show collision** draws the floors, walls and ceilings around Link (like gz's
-collision view), coloured by kind, the way the air walls are drawn now.
+The mesh files in the test build cover the village and forest playable areas
+in both ages, Dodongo's Cavern, Forest Temple and Inside the Deku Tree. Copy
+the artifact's `sd/sloperinaGZ/mesh` directory to `sloperinaGZ/mesh` on the
+game's virtual SD card. The release installers also copy it. The runtime
+loads simplified, deduplicated edges from the current and neighboring 8 m
+cells. The mesh uses a fixed draw budget with placed overlays drawn first.
+It shows through scenery and currently represents static geometry only.
+
+Run `python tools/collision_mesh.py <Area> <Map>` with `OOTMENU_NUP` set to
+generate another map. Use `--bounds X0 Z0 X1 Z1` to limit the export to the
+playable area on large maps. This produces the SGM1 edge file read by
+`src/ootgz/collision_mesh.c`. The development notes below describe the original
+plan and the underlying collision decoder.
 
 ## Contents
 

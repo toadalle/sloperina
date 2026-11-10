@@ -99,6 +99,7 @@ dist: all
 	cp $(BINDIR)/$(SUBSDK) $(PATCHES) $(DISTDIR)/exefs/
 	# the SD card: the translation template (tools/lang_template.py), sd:/sloperinaGZ/lang/
 	mkdir -p $(DISTDIR)/sd/$(NAME)/lang && cp lang/template.json $(DISTDIR)/sd/$(NAME)/lang/
+	mkdir -p $(DISTDIR)/sd/$(NAME)/mesh && cp data/mesh/*.mesh $(DISTDIR)/sd/$(NAME)/mesh/
 
 clean:
 	rm -rf $(OBJDIR) $(BINDIR) $(DISTDIR)

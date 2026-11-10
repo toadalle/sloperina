@@ -10,6 +10,7 @@
  * faces; here only the outlines, and like the Python view they show through scenery.) */
 #include "airwall.h"
 
+#include "collision_mesh.h"
 #include "data.h"
 #include "diagnostics.h"
 #include "gamedata.h"
@@ -567,6 +568,34 @@ static void add_world_cross(aw_dot_t *out, int *n, const view_cam_t *cam, const 
   }
 }
 
+static void draw_collision_mesh(aw_dot_t *out, int *n, const view_cam_t *cam)
+{
+  vec3f_t link;
+  if (!link_drawn_pos(&link))
+    return;
+  unsigned count;
+  const mesh_edge_t *mesh = collision_mesh_near(current_map_name, link, &count);
+  int limit = *n + 360;
+  if (limit > MAX_DOTS)
+    limit = MAX_DOTS;
+  for (unsigned i = 0; i < count && *n + 4 <= limit; i++) {
+    const mesh_edge_t *edge = &mesh[i];
+    if (edge->kind > 2)
+      continue;
+    float a[3], b[3], va[3], vb[3];
+    for (int axis = 0; axis < 3; axis++) {
+      a[axis] = edge->a[axis] / 16.0f;
+      b[axis] = edge->b[axis] / 16.0f;
+    }
+    float dy = (a[1] + b[1]) * .5f - link.y;
+    if (dy < -12 || dy > 12)
+      continue;
+    view_point(cam, a, va);
+    view_point(cam, b, vb);
+    add_edge_dots(out, n, cam, va, vb, AW_MESH_FLOOR + edge->kind, 4);
+  }
+}
+
 void airwall_frame(bool menu_open)
 {
   update_map();
@@ -576,7 +605,8 @@ void airwall_frame(bool menu_open)
   bool enabled = airwalls_shown || loading_zones_shown || void_zones_shown;
   vec3f_t fall;
   bool show_fall = void_zones_shown && diagnostics_last_fall(current_map_name, &fall);
-  bool draw = enabled && (n_walls || show_fall) && !menu_open && !game_is_paused();
+  bool draw = ((enabled && (n_walls || show_fall)) || collision_mesh_shown) &&
+              !menu_open && !game_is_paused();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
     if (show_fall) {
@@ -612,6 +642,8 @@ void airwall_frame(bool menu_open)
       for (int e = geo->first_edge; n < MAX_DOTS && e < geo->first_edge + geo->n_edges; e++)
         add_edge_dots(dots[next], &n, &cam, camera_points[edges[e][0]], camera_points[edges[e][1]], color, limit);
     }
+    if (collision_mesh_shown)
+      draw_collision_mesh(dots[next], &n, &cam);
   }
   n_dots[next] = n;
   __atomic_store_n(&published, n ? next : -1, __ATOMIC_RELEASE);
@@ -660,4 +692,32 @@ void airwall_nearest_death(char *buf, int len)
   float x = p[0] - link.x, y = p[1] - link.y, z = p[2] - link.z;
   snprintf(buf, len, TF("nearest death: %.0fm  %.1f / %.1f / %.1f"),
            (double)sqrtf(x * x + y * y + z * z), (double)p[0], (double)p[1], (double)p[2]);
+}
+
+/* Distance to the center of the placed geometry, not a collision query. */
+void airwall_nearest_barrier(char *buf, int len)
+{
+  vec3f_t link;
+  int nearest = -1;
+  float best = 0;
+  if (link_drawn_pos(&link)) {
+    for (int i = 0; i < n_walls; i++) {
+      if (map_wall(i)->kind > VOLUME_OTHER_WALL)
+        continue;
+      const float *p = wall_geo[i].centre;
+      float x = p[0] - link.x, y = p[1] - link.y, z = p[2] - link.z;
+      float distance = x*x + y*y + z*z;
+      if (nearest < 0 || distance < best) {
+        nearest = i;
+        best = distance;
+      }
+    }
+  }
+  if (nearest < 0) {
+    snprintf(buf, len, "unavailable");
+    return;
+  }
+  const airwall_t *wall = map_wall(nearest);
+  snprintf(buf, len, "%s, %.2fm to center, %s", wall->actor, (double)sqrtf(best),
+           wall->kind == VOLUME_BLOCKER ? "player barrier" : "special-purpose barrier");
 }

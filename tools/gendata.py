@@ -120,7 +120,7 @@ WC_CHILD, WC_ADULT, WC_DUNGEON, WC_BOSS, WC_OTHER = range(len(CATEGORIES))
 # air walls: airshape_t type, and airwall_t kind (does it stop Link?)
 SHAPE_BOX, SHAPE_CYLINDER = 0, 1
 WALL_STOPS_PLAYER, WALL_IGNORES_PLAYER = 0, 1
-PLAYER_MASKS = {"HitOnlyPlayer", "Default", None}  # rigid-body hit masks that stop Link (airwall.py PLAYER_MASKS)
+PLAYER_MASKS = {"HitOnlyPlayer", "Default"}  # rigid-body hit masks that stop Link (airwall.py PLAYER_MASKS)
 
 NO_FIELD = "{ 0, FT_NONE }"
 FIELD_TYPES = {"Int": "FT_INT", "Bool": "FT_BOOL", "Enum": "FT_ENUM", "Float": "FT_FLOAT"}
@@ -432,13 +432,13 @@ def write_airwalls(out, airwall_maps, scene_maps):
                 kind = scene_kind[wall["kind"]] if "kind" in wall else (
                     WALL_STOPS_PLAYER if wall.get("mask") in PLAYER_MASKS else WALL_IGNORES_PLAYER
                 )
-                walls.append((wall["t"], wall["r"], wall["s"], first_shape, n_shapes - first_shape, kind))
+                walls.append((wall["t"], wall["r"], wall["s"], first_shape, n_shapes - first_shape, kind, wall.get("actor", "")))
             index.append((name, first_wall, len(walls) - first_wall))
     out.write("};")
     out.write("const airwall_t data_airwalls[] = {")
-    for translation, rotation, scale, first_shape, count, kind in walls:
+    for translation, rotation, scale, first_shape, count, kind, actor in walls:
         out.write(f"  {{ {c_vec3(translation)}, {c_vec3(rotation)}, {c_vec3(scale)}, "
-                  f"{first_shape}, {count}, {kind} }},")
+                  f"{first_shape}, {count}, {kind}, {c_string(actor)} }},")
     out.write("};")
     out.write("const airmap_t data_airmaps[] = {")
     for name, first_wall, count in maps:

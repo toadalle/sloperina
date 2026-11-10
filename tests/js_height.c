@@ -25,6 +25,7 @@ static const struct z64hd_build test_build; /* no build: the version-specific pa
 const struct z64hd_build *z64hd_game = &test_build;
 bool enemy_hp_shown;
 bool cheats[CHEAT_COUNT], frame_advance, pause_display, warp_arrival_cutscenes;
+bool collision_mesh_shown;
 bool levitate_enabled, levitate_through_walls, loading_zones_shown, void_zones_shown, airwalls_shown, airwalls_all;
 bool levitate_reset_speed = true;
 bool levitate_ghost_default;

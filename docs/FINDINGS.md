@@ -905,3 +905,14 @@ flag inputs were clear. `main+0x5FBC44` sets that bit from a physics-query path.
 The snapshot is after the type was selected, so it does not prove the earlier
 branch or identify the exact query geometry. The trace now logs the first
 sample with a nonzero type for each observed fall flow.
+
+The v131072 disassembly narrows the bit-19 producer. In this path,
+`main+0x5F91F0` loads the object from Link's components `+0x460`.
+At `main+0x5F9C7C` and `+0x5F9CA0`, two virtual calls use query index 8.
+The branch at `+0x5F9CB4` can set the bit from object flags `+0xA8` bit 18.
+The other branch checks the query result's packed flags and a returned
+scalar greater than 3.0. The recorder now includes the object flags,
+ready byte `+0x37C` and earlier gate scalar `+0x510`, plus the selector's
+other player-side inputs. The scalar at `+0x510` is separate from the
+virtual call's return. The runtime trace does not yet capture that call
+or identify its hit geometry.

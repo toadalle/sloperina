@@ -94,7 +94,15 @@ camera evidence to compare the two snapshots.
 ## Tracing an out-of-bounds fall
 
 In 1.1.1, reproduce the fall with the practice menu closed. After Link returns,
-take a Quick Snapshot or Deep Diagnostics. The manifest keeps the last observed
+take **Deep Diagnostics**. It adds `flight-recorder.csv` (the latest 512
+samples) and separate windows in `fall-latest.csv` and `fall-previous.csv`
+for up to two observed fall events. Each window keeps up to 128 preceding
+samples and 96 samples starting at detection. The recorder samples at up
+to 30 Hz in steady state and also on changes in observed event, contact or
+ownership state. The manifest gives the guest tick frequency, validity
+flags and trigger tick for each window.
+
+The manifest keeps the last observed
 `DmF_SY_FallDown`, the native abyss type if readable, and Link's coordinates
 before and during the event. It also records the player and contact flags the
 native selector reads and logs the event to the SD card. The fall

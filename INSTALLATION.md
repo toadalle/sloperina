@@ -56,6 +56,7 @@ load/0400486024DEC000/sloperinaGZ/exefs/subsdk9
 load/0400486024DEC000/sloperinaGZ/exefs/33FA6C2C23848282A77E8B88A0A93F4887C55920.ips
 load/0400486024DEC000/sloperinaGZ/exefs/E0F3CCFAF50065AE4EA01EB5AEB13B1A45DA3348.ips
 sdmc/sloperinaGZ/lang/template.json          (optional, for translators)
+sdmc/sloperinaGZ/mesh/*.mesh                 (optional, for the static collision overlay)
 ```
 
 ### Ryujinx

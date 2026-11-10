@@ -1192,11 +1192,14 @@ static void compose_see_through(int p, uint8_t *dst, const uint8_t *under, int u
 
 static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_BLOCKS] = { 0.26f, 0.60f, 1.0f, 1.0f }, /* blue: stops Link */
-  [AW_OTHER] = { 0.52f, 0.72f, 0.94f, 1.0f },  /* lighter blue: other barriers */
+  [AW_OTHER] = { 0.53f, 0.84f, 0.91f, 1.0f },  /* pale cyan: special-purpose barriers */
   [AW_LOADING] = { 1.0f, 0.86f, 0.23f, 1.0f },
   [AW_VOID] = { 1.0f, 0.26f, 0.22f, 1.0f },
   [AW_GROTTO_SAFETY] = { 0.79f, 0.48f, 1.0f, 1.0f },
   [AW_FALL_SAMPLE] = { 1.0f, 0.50f, 0.15f, 1.0f },
+  [AW_MESH_FLOOR] = { 0.28f, 0.83f, 0.37f, 1.0f },
+  [AW_MESH_WALL] = { 0.22f, 0.62f, 0.98f, 1.0f },
+  [AW_MESH_CEILING] = { 0.94f, 0.34f, 0.72f, 1.0f },
 };
 
 /* enemy health (enemyhp.c) */

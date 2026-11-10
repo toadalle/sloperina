@@ -3,6 +3,7 @@
 
 #include <stdarg.h>
 
+#include "airwall.h"
 #include "cct.h"
 #include "cheats.h"
 #include "gamedata.h"
@@ -23,7 +24,12 @@ static size_t report_size;
 typedef struct {
   uint32_t type, player_flags, contact_flags;
   uint64_t contact_tags;
-  bool valid;
+  uintptr_t query_flags_fn, query_scalar_fn;
+  uint32_t mode, query_flags;
+  uint16_t extended_flags;
+  uint8_t gate, query_ready;
+  float gate_value, query_distance, fall_distance;
+  bool valid, query_valid, extended_valid;
 } abyss_sample_t;
 
 static struct {
@@ -35,6 +41,43 @@ static struct {
   bool has_before, has_position;
 } last_fall;
 
+/* Keep a live timeline plus the two most recent fall windows. All writes to
+ * disk are explicit. Sampling runs at 30 Hz and on observed state changes. */
+#define TRACE_RECENT 512
+#define TRACE_PRE 128
+#define TRACE_POST 96
+#define TRACE_FALLS 2
+
+enum {
+  TRACE_FEET = 1 << 0, TRACE_CAMERA = 1 << 1, TRACE_CONTROLLER = 1 << 2,
+  TRACE_GROUND_KNOWN = 1 << 3, TRACE_GROUNDED = 1 << 4, TRACE_NO_HIT = 1 << 5,
+  TRACE_MENU = 1 << 6, TRACE_NATIVE_UI = 1 << 7, TRACE_TRANSITION = 1 << 8,
+  TRACE_FALL = 1 << 9, TRACE_LEVITATE = 1 << 10, TRACE_GHOST = 1 << 11,
+  TRACE_MENU_PAUSE = 1 << 12, TRACE_ABYSS = 1 << 13,
+};
+
+typedef struct {
+  uint64_t tick;
+  uintptr_t actor, camera, body, pending;
+  vec3f_t feet, eye, target, velocity;
+  uint64_t body_flags;
+  abyss_sample_t abyss;
+  uint32_t frame, state, held, pressed;
+  int32_t sticks[4], speed;
+  char map[GD_STR_LEN], next_map[GD_STR_LEN];
+} trace_sample_t;
+
+static trace_sample_t recent[TRACE_RECENT];
+static unsigned recent_head, recent_count;
+static struct {
+  trace_sample_t samples[TRACE_PRE + TRACE_POST];
+  uint64_t tick;
+  unsigned before, count;
+} fall_traces[TRACE_FALLS];
+static unsigned fall_head;
+static abyss_sample_t frame_abyss;
+static bool frame_fall, frame_fall_started;
+
 static abyss_sample_t abyss_inputs(uintptr_t actor)
 {
   uintptr_t components = actor ? sys_ptr(actor + 0x270) : 0;
@@ -43,13 +86,35 @@ static abyss_sample_t abyss_inputs(uintptr_t actor)
     return (abyss_sample_t){0};
   /* Inputs inspected by the type selector at main+0x82C510. The event can
    * clear flags before our frame hook, so retain the previous sample too. */
-  return (abyss_sample_t){
+  abyss_sample_t sample = {
     .type = *(const volatile uint32_t *)(player + 0x191C),
     .player_flags = *(const volatile uint32_t *)(player + 0x28),
     .contact_flags = *(const volatile uint32_t *)(player + 0x13D0),
     .contact_tags = *(const volatile uint64_t *)(player + 0x13E8),
+    .mode = *(const volatile uint32_t *)(player + 0x7E8),
+    .gate = *(const volatile uint8_t *)(player + 0x13FB),
+    .gate_value = *(const volatile float *)(player + 0x16A0),
+    .fall_distance = *(const volatile float *)(player + 0x190C),
     .valid = true,
   };
+  sample.extended_valid = sys_mapped(player + 0x1C30, sizeof(uint16_t), SYS_PERM_R);
+  if (sample.extended_valid)
+    sample.extended_flags = *(const volatile uint16_t *)(player + 0x1C30);
+  /* The producer of contact bit 19 at main+0x5FBC44 reads this object.
+   * Its flags and scalar are evidence; do not call its virtual queries. */
+  uintptr_t query = sys_ptr(components + 0x460);
+  sample.query_valid = query && sys_mapped(query, 0x514, SYS_PERM_R);
+  if (sample.query_valid) {
+    sample.query_flags = *(const volatile uint32_t *)(query + 0xA8);
+    sample.query_ready = *(const volatile uint8_t *)(query + 0x37C);
+    sample.query_distance = *(const volatile float *)(query + 0x510);
+    uintptr_t vtable = sys_ptr(query + 0x108);
+    if (vtable) {
+      sample.query_flags_fn = sys_ptr(vtable + 0xB0);
+      sample.query_scalar_fn = sys_ptr(vtable + 0xB8);
+    }
+  }
+  return sample;
 }
 
 /* Read the active flow using the same pointer chain as main+0xBCC0B0.
@@ -95,7 +160,10 @@ bool diagnostics_fall_frame(void)
     first_type_inputs = (abyss_sample_t){0};
   if (inputs.type && (!first_type_inputs.valid || inputs.type != first_type_inputs.type))
     first_type_inputs = inputs;
-  if (active && !was_active) {
+  frame_abyss = inputs;
+  frame_fall = active;
+  frame_fall_started = active && !was_active;
+  if (frame_fall_started) {
     const char *map = gd_get_str(GD_STR_MAP);
     snprintf(last_fall.map, sizeof(last_fall.map), "%.63s", map ? map : "");
     last_fall.frame = frame_counter();
@@ -167,9 +235,17 @@ static void append(const char *format, ...)
 
 static void append_abyss_inputs(const char *phase, abyss_sample_t sample)
 {
-  if (sample.valid)
-    append("%s abyss inputs type=%u player=%#x contact=%#x tags=%#llx\n", phase,
-           sample.type, sample.player_flags, sample.contact_flags, (unsigned long long)sample.contact_tags);
+  if (!sample.valid)
+    return;
+  append("%s abyss inputs type=%u player=%#x contact=%#x tags=%#llx mode=%u gate=%#x value=%.6g fall-distance=%.6g\n",
+         phase, sample.type, sample.player_flags, sample.contact_flags, (unsigned long long)sample.contact_tags,
+         sample.mode, sample.gate, sample.gate_value, sample.fall_distance);
+  if (sample.extended_valid)
+    append("%s extended flags=%#x\n", phase, sample.extended_flags);
+  if (sample.query_valid)
+    append("%s contact-query flags=%#x ready=%#x scalar=%.6g flags-fn=%#lx scalar-fn=%#lx\n", phase,
+           sample.query_flags, sample.query_ready, sample.query_distance,
+           (unsigned long)sample.query_flags_fn, (unsigned long)sample.query_scalar_fn);
 }
 
 static bool write_file(const char *dir, const char *name, const void *data, size_t size)
@@ -188,6 +264,137 @@ static bool write_file(const char *dir, const char *name, const void *data, size
   if (!written)
     fs_delete_file(path);
   return written;
+}
+
+void diagnostics_trace_frame(bool transition, bool native_ui, bool menu)
+{
+  static uint64_t last_tick;
+  static unsigned last_state;
+  static uintptr_t last_actor;
+  static abyss_sample_t last_abyss;
+  uint64_t tick = sys_tick();
+  uintptr_t actor = link_actor();
+  unsigned state = (transition ? TRACE_TRANSITION : 0) |
+                   (native_ui ? TRACE_NATIVE_UI : 0) |
+                   (menu ? TRACE_MENU : 0) |
+                   (pause_menu_owned() ? TRACE_MENU_PAUSE : 0) |
+                   (levitate_enabled ? TRACE_LEVITATE : 0) |
+                   (levitate_through_walls ? TRACE_GHOST : 0) |
+                   (frame_fall ? TRACE_FALL : 0) |
+                   (frame_abyss.valid ? TRACE_ABYSS : 0);
+  if (tick - last_tick < sys_tick_freq() / 30 && last_state == state && last_actor == actor &&
+      last_abyss.type == frame_abyss.type && last_abyss.player_flags == frame_abyss.player_flags &&
+      last_abyss.contact_flags == frame_abyss.contact_flags && last_abyss.contact_tags == frame_abyss.contact_tags)
+    return;
+
+  last_tick = tick;
+  last_state = state;
+  last_actor = actor;
+  last_abyss = frame_abyss;
+  trace_sample_t *sample = &recent[recent_head];
+  *sample = (trace_sample_t){
+    .tick = tick, .actor = actor, .frame = frame_counter(), .state = state,
+    .held = input_held(), .pressed = input_pressed(), .speed = levitate_move_speed, .abyss = frame_abyss,
+  };
+  input_sticks(&sample->sticks[0], &sample->sticks[1], &sample->sticks[2], &sample->sticks[3]);
+  const char *map = gd_get_str(GD_STR_MAP), *next = gd_get_str(GD_STR_NEXT_MAP);
+  snprintf(sample->map, sizeof(sample->map), "%.63s", map ? map : "");
+  snprintf(sample->next_map, sizeof(sample->next_map), "%.63s", next ? next : "");
+  if (actor && link_drawn_pos(&sample->feet))
+    sample->state |= TRACE_FEET;
+  uintptr_t cam = camera();
+  if (cam && sys_mapped(cam + 0x38, 2 * sizeof(vec3f_t), SYS_PERM_R)) {
+    sample->camera = cam;
+    memcpy(&sample->eye, (const void *)(cam + 0x38), sizeof(vec3f_t));
+    memcpy(&sample->target, (const void *)(cam + 0x44), sizeof(vec3f_t));
+    sample->state |= TRACE_CAMERA;
+  }
+  cct_snapshot_t cct;
+  if (actor && cct_snapshot(&cct) && cct.actor == actor) {
+    sample->state |= TRACE_CONTROLLER | (cct.no_hit ? TRACE_NO_HIT : 0);
+    sample->body = cct.body;
+    sample->pending = cct.pending;
+    sample->velocity = cct.velocity;
+    sample->body_flags = cct.body_flags;
+    bool grounded;
+    if (cct_on_ground(actor, &grounded))
+      sample->state |= TRACE_GROUND_KNOWN | (grounded ? TRACE_GROUNDED : 0);
+  }
+  if (frame_fall_started) {
+    unsigned slot = fall_head++ % TRACE_FALLS;
+    unsigned before = recent_count < TRACE_PRE ? recent_count : TRACE_PRE;
+    fall_traces[slot].tick = tick;
+    fall_traces[slot].before = fall_traces[slot].count = before;
+    for (unsigned i = 0; i < before; i++)
+      fall_traces[slot].samples[i] = recent[(recent_head + TRACE_RECENT - before + i) % TRACE_RECENT];
+  }
+  for (unsigned i = 0; i < TRACE_FALLS; i++)
+    if (fall_traces[i].tick && fall_traces[i].count < fall_traces[i].before + TRACE_POST)
+      fall_traces[i].samples[fall_traces[i].count++] = *sample;
+  recent_head = (recent_head + 1) % TRACE_RECENT;
+  if (recent_count < TRACE_RECENT)
+    recent_count++;
+}
+
+static bool write_trace(const char *dir, const char *name, const trace_sample_t *samples,
+                        unsigned capacity, unsigned first, unsigned count)
+{
+  static char csv[TRACE_RECENT * 640 + 512];
+  size_t used = (size_t)snprintf(csv, sizeof(csv),
+    "tick,frame,map,next_map,state,actor,camera,body,pending,held,pressed,lx,ly,rx,ry,speed,"
+    "feet_x,feet_y,feet_z,eye_x,eye_y,eye_z,target_x,target_y,target_z,"
+    "vel_x,vel_y,vel_z,body_flags,abyss_type,player_flags,contact_flags,contact_tags,"
+    "abyss_mode,abyss_gate,abyss_value,fall_distance,extended_valid,extended_flags,"
+    "query_valid,query_flags,query_ready,query_scalar,query_flags_fn,query_scalar_fn\n");
+  for (unsigned i = 0; i < count; i++) {
+    const trace_sample_t *p = &samples[(first + i) % capacity];
+    /* Map IDs are internal strings. Strip CSV control characters before exporting. */
+    char map[GD_STR_LEN], next[GD_STR_LEN];
+    for (unsigned j = 0; j < GD_STR_LEN; j++) {
+      char a = p->map[j], b = p->next_map[j];
+      map[j] = a == ',' || a == '\r' || a == '\n' || a == '"' ? '?' : a;
+      next[j] = b == ',' || b == '\r' || b == '\n' || b == '"' ? '?' : b;
+    }
+    int n = snprintf(csv + used, sizeof(csv) - used,
+      "%llu,%u,%s,%s,%#x,%#lx,%#lx,%#lx,%#lx,%#x,%#x,%d,%d,%d,%d,%d,"
+      "%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,"
+      "%#llx,%u,%#x,%#x,%#llx,%u,%#x,%.6g,%.6g,%u,%#x,%u,%#x,%#x,%.6g,%#lx,%#lx\n",
+      (unsigned long long)p->tick, p->frame, map, next, p->state,
+      (unsigned long)p->actor, (unsigned long)p->camera, (unsigned long)p->body, (unsigned long)p->pending,
+      p->held, p->pressed, p->sticks[0], p->sticks[1], p->sticks[2], p->sticks[3], p->speed,
+      p->feet.x, p->feet.y, p->feet.z, p->eye.x, p->eye.y, p->eye.z, p->target.x, p->target.y, p->target.z,
+      p->velocity.x, p->velocity.y, p->velocity.z, (unsigned long long)p->body_flags,
+      p->abyss.type, p->abyss.player_flags, p->abyss.contact_flags, (unsigned long long)p->abyss.contact_tags,
+      p->abyss.mode, p->abyss.gate, p->abyss.gate_value, p->abyss.fall_distance,
+      p->abyss.extended_valid, p->abyss.extended_flags, p->abyss.query_valid, p->abyss.query_flags,
+      p->abyss.query_ready, p->abyss.query_distance,
+      (unsigned long)p->abyss.query_flags_fn, (unsigned long)p->abyss.query_scalar_fn);
+    if (n < 0 || (size_t)n >= sizeof(csv) - used)
+      return false;
+    used += (size_t)n;
+  }
+  return write_file(dir, name, csv, used);
+}
+
+static bool export_traces(const char *dir)
+{
+  unsigned oldest = (recent_head + TRACE_RECENT - recent_count) % TRACE_RECENT;
+  bool ok = write_trace(dir, "flight-recorder.csv", recent, TRACE_RECENT, oldest, recent_count);
+  append("flight-recorder.csv %s (%u samples)\n", ok ? "written" : "write failed", recent_count);
+  for (unsigned i = 0; i < TRACE_FALLS && i < fall_head; i++) {
+    unsigned slot = (fall_head - 1 - i) % TRACE_FALLS;
+    const __typeof__(fall_traces[0]) *trace = &fall_traces[slot];
+    const char *file = i == 0 ? "fall-latest.csv" : "fall-previous.csv";
+    bool saved = write_trace(dir, file, trace->samples, TRACE_PRE + TRACE_POST, 0, trace->count);
+    append("%s %s trigger tick=%llu, %u before and %u at/after\n", file,
+           saved ? "written" : "write failed", (unsigned long long)trace->tick, trace->before,
+           trace->count - trace->before);
+    ok &= saved;
+  }
+  append("CSV state flags: feet=0x1 camera=0x2 controller=0x4 ground-valid=0x8 grounded=0x10"
+         " no-hit=0x20 menu=0x40 native-ui=0x80 transition=0x100 fall-flow=0x200"
+         " levitate-enabled=0x400 ghost=0x800 menu-pause=0x1000 abyss-valid=0x2000\n");
+  return ok;
 }
 
 static uintptr_t sample_link_and_camera(vec3f_t pose[2])
@@ -316,7 +523,7 @@ void diagnostics_dump(bool deep)
   snprintf(dir, sizeof(dir), SD_DIR "/sloperina-devdump-%llx-%u", (unsigned long long)tick, ++serial);
 
   report_size = 0;
-  append("SloperinaGZ diagnostics v1 (%s)\nMod=%s\nGame=%s build=%s main=%#lx\n",
+  append("SloperinaGZ diagnostics v2 (%s)\nMod=%s\nGame=%s build=%s main=%#lx\n",
          deep ? "deep" : "quick", PACKAGE_VERSION, z64hd_game->version,
          z64hd_game->build_id, (unsigned long)z64hd_main);
   append("Tick=%llu frequency=%llu frame=%u\n", (unsigned long long)tick,
@@ -355,6 +562,11 @@ void diagnostics_dump(bool deep)
   vec3f_t pose[2];
   uintptr_t cam = sample_link_and_camera(pose);
   sample_controller();
+  char overlay[128];
+  airwall_summary(overlay, sizeof(overlay));
+  append("Placed overlays: %s\n", overlay);
+  airwall_nearest_barrier(overlay, sizeof(overlay));
+  append("Nearest placed barrier: %s\n", overlay);
   if (last_fall.frame) {
     append("Last observed DmF_SY_FallDown frame=%u map=%s\n", last_fall.frame, last_fall.map);
     if (last_fall.abyss_type)
@@ -398,6 +610,7 @@ void diagnostics_dump(bool deep)
       partial |= cam != 0;
       append("camera-pose.bin unavailable (%s)\n", cam ? "write failed" : "no readable camera");
     }
+    partial |= !export_traces(dir);
     sample_history();
   }
   if (!write_file(dir, "manifest.txt", report, report_size)) {

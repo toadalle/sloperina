@@ -7,7 +7,8 @@ placed actor whose name contains "AirWall": its position, rotation (radians, X Y
 .bcett layout, and its shapes from the actor pack (ControllerSetParam ShapeNamePathAry, following $parent),
 in the actor's own unscaled space. Box: centre (incl. OffsetTranslation) + half extents. Cylinder: two end
 centres + radius. Other shapes (Polytope, PhshMesh) are counted but not stored. "mask" is the rigid body's
-EnableLayerHitMask (HitOnlyPlayer, HitOnlyCharacter, ... or None = everything).
+entity or sub-layer hit mask. A missing entity mask on a valid body is Default,
+unless an actor-specific restriction is recorded below.
 """
 import json
 import os
@@ -88,10 +89,17 @@ def actor_shapes(actor):
         shape_param = load_chain(files, member(ref["FilePath"]))
         shapes += _shapes_of(shape_param)
         skipped += [key for key in shape_param if key not in NOT_SHAPES]
-    mask = None
+    masks = set()
     for ref in controller_set.get("RigidBodyEntityNamePathAry") or []:
         rigid_body = load_chain(files, member(ref["FilePath"]))
-        mask = rigid_body.get("EnableLayerHitMask", mask)
+        if rigid_body:
+            masks.add(rigid_body.get("EnableSubLayerHitMask") or rigid_body.get("EnableLayerHitMask", "Default"))
+    # These camera-only variants inherit the default entity body template.
+    if actor == "FldObj_AirWall_CameraSightAndCameraBody" and masks == {"Default"}:
+        masks = {"CameraOnly"}
+    mask = next((m for m in ("HitOnlyPlayer", "Default") if m in masks), None)
+    if mask is None and masks:
+        mask = "+".join(sorted(masks))
     result = (shapes, mask, skipped)
     _cache[actor] = result
     return result

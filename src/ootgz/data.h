@@ -71,7 +71,7 @@ extern const spawn_t     data_spawns[];      extern const int data_n_spawns;
  * R = Rz Ry Rx from r (radians), as sead's makeR (airwalls.py). */
 enum { VOLUME_BLOCKER, VOLUME_OTHER_WALL, VOLUME_LOADING, VOLUME_VOID, VOLUME_GROTTO_SAFETY, VOLUME_COUNT };
 typedef struct { uint8_t type; float a[3], b[3]; float radius; } airshape_t; /* box: centre, half; cylinder: a, b, r */
-typedef struct { float t[3], r[3], s[3]; uint16_t first_shape; uint8_t n_shapes, kind; } airwall_t;
+typedef struct { float t[3], r[3], s[3]; uint16_t first_shape; uint8_t n_shapes, kind; const char *actor; } airwall_t;
 typedef struct { const char *map; uint16_t first, n; } airmap_t;
 extern const airshape_t  data_airshapes[];
 extern const airwall_t   data_airwalls[];

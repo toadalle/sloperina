@@ -370,6 +370,7 @@ static void frame(void)
   if (!transition)
     position_frame(menu_owns_input || wait_for_ui_release);
   warp_frame();
+  diagnostics_trace_frame(transition, native_ui, menu_current != 0);
   gfx_frame();
 
   if (!transition) {

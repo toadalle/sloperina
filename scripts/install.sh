@@ -147,6 +147,10 @@ else
     copy_one "$MODULE" "$EXEFS" subsdk9
   )
   [ -f "$TEMPLATE" ] && copy_one "$TEMPLATE" "$LANGDIR" template.json
+  for mesh in "$HERE"/files/mesh/*.mesh; do
+    [ -f "$mesh" ] || continue
+    copy_one "$mesh" "${LANGDIR%/lang}/mesh" "${mesh##*/}"
+  done
   echo; echo "Done. Start the game and press R + right stick down for the menu."
   if [ "$KIND" = switch ]; then echo "Put the SD card back in the console and start the game with Atmosphere."; fi
 fi

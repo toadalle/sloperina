@@ -104,6 +104,13 @@ function Install-To($kind, $dir, $label) {
   }
   Copy-One $Module $layout.Exefs 'subsdk9' $true
   if (Test-Path $Template) { Copy-One $Template $layout.Lang 'template.json' }
+  $meshSource = Join-Path $Files 'mesh'
+  if (Test-Path $meshSource) {
+    $meshTarget = Join-Path (Split-Path -Parent $layout.Lang) 'mesh'
+    Get-ChildItem -LiteralPath $meshSource -Filter '*.mesh' -File | ForEach-Object {
+      Copy-One $_.FullName $meshTarget $_.Name
+    }
+  }
   Say "`nDone. Start the game and press R + right stick down for the menu." 'Green'
   if ($kind -eq 'switch') {
     Say "Put the SD card back in the console and start the game with Atmosphere." 'Gray'

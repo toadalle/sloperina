@@ -7,6 +7,7 @@
 #include "data.h"
 #include "gamedata.h"
 #include "airwall.h"
+#include "collision_mesh.h"
 #include "diagnostics.h"
 #include "enemyhp.h"
 #include "memview.h"
@@ -1895,7 +1896,7 @@ static void build_scene(void)
     enemy_hp->log_label = "enemy health:";
   }
 
-  menu_init(&m_collision, "collision", 9);
+  menu_init(&m_collision, "collision", 10);
   menu_add_heading(&m_collision, "scene overlays");
   menu_item_t *loading = menu_add_check(&m_collision, "show loading zones", get_scene_volume,
                                         set_scene_volume, (intptr_t)&loading_zones_shown);
@@ -1910,11 +1911,15 @@ static void build_scene(void)
     show->hint = "Blue: invisible walls that block Link";
     show->log_label = "air walls:";
   }
-  menu_item_t *all_kinds = menu_add_check(&m_collision, "include non-player air walls", get_air_walls_all, set_air_walls_all, 0);
+  menu_item_t *all_kinds = menu_add_check(&m_collision, "include special-purpose air walls", get_air_walls_all, set_air_walls_all, 0);
   if (all_kinds) {
-    all_kinds->hint = "also the walls for enemies, NPCs and objects";
+    all_kinds->hint = "Pale cyan: character, animal, camera and other special-purpose walls";
     all_kinds->log_label = "all kinds:";
   }
+  menu_item_t *mesh = menu_add_check(&m_collision, "show static collision mesh", get_scene_volume,
+                                      set_scene_volume, (intptr_t)&collision_mesh_shown);
+  if (mesh)
+    mesh->hint = "Green floors, blue walls, pink ceilings (installed maps only)";
   menu_add_text(&m_collision, text_air_wall_summary, 0);
   menu_add_text(&m_collision, text_nearest_death, 0);
   menu_add_text(&m_collision, text_last_fall, 0);
