@@ -1,0 +1,14 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build SloperinaGZ with devkitA64
+        run: ./docker-make
