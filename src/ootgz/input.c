@@ -44,6 +44,7 @@ static int repeat_countdown;
 static uint32_t suppress_until_release;
 bool input_block_game;
 uint32_t input_hide_from_game;
+uint32_t input_hide_sticks_from_game;
 
 /* Add one controller's state (one style of one NpadIdType) to this frame's input. */
 static void read_npad(void (*get_states)(int *, void *, int, const uint32_t *), uint32_t npad_id)
@@ -148,7 +149,8 @@ int32_t input_force_stick[4];
  * advance's buffered input and take out the buttons the game mustn't see. */
 static void filter_game_states(void *states, int count)
 {
-  if (!input_block_game && !input_hide_from_game && !input_force_active && !suppress_until_release)
+  if (!input_block_game && !input_hide_from_game && !input_hide_sticks_from_game && !input_force_active &&
+      !suppress_until_release)
     return;
   for (int i = 0; i < count; i++) {
     npad_state_t *state = (npad_state_t *)((char *)states + i * NPAD_STATE_SIZE);
@@ -169,6 +171,10 @@ static void filter_game_states(void *states, int count)
       }
     }
     state->buttons &= ~(uint64_t)(input_hide_from_game | suppress_until_release);
+    if (input_hide_sticks_from_game & INPUT_HIDE_LEFT_STICK)
+      state->lx = state->ly = 0;
+    if (input_hide_sticks_from_game & INPUT_HIDE_RIGHT_STICK)
+      state->rx = state->ry = 0;
   }
 }
 

@@ -2196,10 +2196,10 @@ static void build_levitate(void)
   menu_add_heading(&m_levitate, "levitation options");
   menu_item_t *lv = menu_add_check(&m_levitate, "enabled", get_levitate, set_levitate, 0);
   if (lv)
-    lv->hint = "L3: toggle   X: up   B: down   release: hover", lv->log_label = "levitate";
+    lv->hint = "L3: hover on/off   R3: ghost on/off   X: up   B: down", lv->log_label = "levitate";
   menu_item_t *walls = menu_add_check(&m_levitate, "through walls", get_walls, set_walls, 0);
   if (walls)
-    walls->hint = "Disable Link collision while floating; B descends through floors";
+    walls->hint = "Ghost collision state while hovering; R3 is the normal toggle";
   menu_item_t *rise = menu_add_option(&m_levitate, "vertical speed", 7, lev_speed_names, get_lev_speed, set_lev_speed, 0);
   if (rise)
     rise->hint = "X/B speed; legacy 0 uses 4. Release to hover";

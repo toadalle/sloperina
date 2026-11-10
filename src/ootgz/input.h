@@ -31,6 +31,9 @@ void     input_suppress_until_release(uint32_t mask);
 extern bool input_block_game;
 /* Buttons the game never sees (e.g. L while levitate is on). */
 extern uint32_t input_hide_from_game;
+enum { INPUT_HIDE_LEFT_STICK = 1u << 0, INPUT_HIDE_RIGHT_STICK = 1u << 1 };
+/* Stick axes hidden from gameplay while raw input remains available to the mod. */
+extern uint32_t input_hide_sticks_from_game;
 /* given to the game on top of the controller until cleared (frame advance's buffered input) */
 extern bool input_force_active;
 extern uint32_t input_force_buttons;

@@ -8,8 +8,8 @@
  * each (kept only if his drawn position follows; put back at once otherwise). The pointer path to the
  * one that works is logged, so a later version can go straight to it.
  *
- * Levitate (as ootmenu, game.py _float, once per frame): L3 starts floating, L3 again drops him, R3
- * held keeps the height; X rises, B descends, neither hovers. The left stick moves him
+ * Hover: L3 toggles it, R3 toggles ghost collision while hovering, X rises, B descends,
+ * and releasing both holds altitude. The left stick moves him
  * relative to the camera. Walls: the game pushes
  * Link back out of them between our writes; a push-back is a move against his heading (after he has
  * held it for a moment, or the momentum of a turn looks like one), and it marks the wall for a
@@ -41,7 +41,7 @@
 float hypotf(float x, float y); /* from sdk */
 
 bool levitate_enabled;
-bool levitate_through_walls = true;
+bool levitate_through_walls;
 int levitate_speed = 4;       /* rise, units/s */
 int levitate_move_speed = 6;  /* stick, units/s */
 
@@ -458,6 +458,7 @@ static void drop(void)
     return;
   }
   floating = false;
+  levitate_through_walls = false; /* ghost is scoped to one hover session */
   if (moving_link) {
     bool reset = cct_reset_vertical_velocity(float_actor);
     cct_clear_fall_distance(float_actor);
@@ -509,12 +510,11 @@ static void track_frozen(double cx, double cy, double cz, vec3f_t drawn)
   last_drawn = drawn;
 }
 
-/* X/B control height; neither, both or R3 hold the current height. */
+/* X/B control height; neither or both hold the current height. */
 static void steer(double dt)
 {
   float_clock += dt;
-  bool hold_height = input_held() & BTN_RSTICK;
-  int vertical = hold_height ? 0 : !!(input_held() & BTN_X) - !!(input_held() & BTN_B);
+  int vertical = !!(input_held() & BTN_X) - !!(input_held() & BTN_B);
   double rise = levitate_speed > 0 ? levitate_speed : 4;
   double move = levitate_move_speed;
   if (!vertical || vel_y * vertical < 0)
@@ -580,7 +580,7 @@ static void float_step(double dt, bool menu_open)
   link_drawn_pos(&drawn);
   track_frozen(cx, cy, cz, drawn);
   uint32_t buttons = input_held();
-  int vertical = buttons & BTN_RSTICK ? 0 : !!(buttons & BTN_X) - !!(buttons & BTN_B);
+  int vertical = !!(buttons & BTN_X) - !!(buttons & BTN_B);
   bool descend_through_floor = !menu_open && levitate_through_walls && vertical < 0;
   if (cy > pos_y && !descend_through_floor && !cct_noclip_active())
     pos_y = cy;
@@ -607,7 +607,7 @@ static void float_step(double dt, bool menu_open)
   }
   if (cct_noclip_active()) {
     vec3f_t position = { (float)pos_x, (float)(pos_y - controller_y_offset), (float)pos_z };
-    if (!cct_noclip_move(&position)) {
+    if (!cct_noclip_move(&position) || !cct_stop_velocity(float_actor)) {
       drop();
       gfx_notice("levitate: controller unavailable; stopped");
       return;
@@ -619,7 +619,8 @@ static void float_step(double dt, bool menu_open)
   for (int i = 0; i < MOTION_WORDS; i++)
     cleared &= ((volatile uint32_t *)(record + RECORD_POS_SIZE))[i] == 0;
   write_record(record, pos_x, pos_y, pos_z, (float)vel_x, (float)vel_y, (float)vel_z, record_has_motion && cleared);
-  if (!cct_reset_vertical_velocity(float_actor) || !cct_clear_fall_distance(float_actor)) {
+  if ((!cct_noclip_active() && !cct_reset_vertical_velocity(float_actor)) ||
+      !cct_clear_fall_distance(float_actor)) {
     drop();
     gfx_notice("levitate: fall protection unavailable; stopped");
     return;
@@ -843,12 +844,14 @@ static void handle_l3(bool menu_open)
 {
   if (!levitate_enabled) {
     drop();
-  } else if (!menu_open && (input_pressed() & BTN_LSTICK)) {
+  } else if (!menu_open && (input_pressed() & BTN_LSTICK) && !(input_held() & (BTN_L | BTN_R))) {
+    /* L/R + L3 is reserved by frame advance; avoid a hover toggle as a side effect. */
     if (floating) {
       drop();
       gfx_notice("levitate off");
     } else {
       floating = true;
+      levitate_through_walls = false; /* always enter hover with normal collision */
       quiet_search = false;
       gfx_notice("levitate on");
     }
@@ -951,6 +954,10 @@ static void frame(bool menu_open)
   double dt = frame_seconds();
   protect_landing(menu_open);
   handle_l3(menu_open);
+  if (!menu_open && floating && (input_pressed() & BTN_RSTICK)) {
+    levitate_through_walls = !levitate_through_walls;
+    gfx_notice(levitate_through_walls ? "ghost mode on" : "ghost mode off");
+  }
 
   if (search_running())
     return;
@@ -1026,6 +1033,8 @@ void levitate_frame(bool menu_open)
    * Our input reads remain raw; only the game's HID wrappers mask these buttons. */
   input_hide_from_game = (levitate_enabled ? BTN_LSTICK : 0) |
                          (floating ? BTN_RSTICK | BTN_X | BTN_B : 0);
+  /* Hover owns horizontal movement; keep the right stick available to the camera. */
+  input_hide_sticks_from_game = floating ? INPUT_HIDE_LEFT_STICK : 0;
 }
 
 const char *levitate_state(void)
@@ -1038,7 +1047,7 @@ const char *levitate_state(void)
       return "not found";
     default:
       if (moving_link)
-        return "floating";
+        return levitate_through_walls ? "ghost" : "floating";
       if (floating)
         return "starting";
       return record ? "ready" : "off";

@@ -1517,8 +1517,8 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
   frame.margin = MARGIN_FONT_PX * frame.scale / SC_ONE;
   bool full_menu = screen && screen->panel[PANEL_MENU].rows && screen->panel[PANEL_MENU].fullscreen;
   frame.menu_y = full_menu ? frame.margin : frame.area.h * MENU_Y_PERMILLE / 1000;
-  /* A dedicated practice menu can use the full supported menu canvas. */
-  int menu_space = frame.area.h - frame.menu_y - frame.margin;
+  /* Size backing storage for the large canvas even if another overlay initializes it first. */
+  int menu_space = frame.area.h - frame.margin * 2;
   int fit = (menu_space * SC_ONE / frame.scale - FONT_H) / CELL_H;
   gfx_menu_rows = fit < MIN_MENU_ROWS ? MIN_MENU_ROWS : fit > GFX_ROWS ? GFX_ROWS : fit;
 

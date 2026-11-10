@@ -1,7 +1,6 @@
-/* Levitate: L3 toggles floating, X/B rise/descend, neither or R3 holds height;
- * left stick moves horizontally. Through-walls mode leases the controller's
- * collision bypass. The game does not see L3 while enabled, nor X/B/R3 while
- * floating. Also the 2x speed cheat (CHEAT_SPEED), using the physics record. */
+/* Hover: L3 toggles it, R3 toggles ghost collision while hovering, X/B rise/descend,
+ * and release holds altitude. Left stick moves horizontally but is hidden from the
+ * game's normal movement state machine while hover owns Link. */
 #ifndef LEVITATE_H
 #define LEVITATE_H
 
