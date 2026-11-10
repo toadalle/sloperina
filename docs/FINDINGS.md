@@ -883,9 +883,14 @@ Its generic out-of-bounds predicate and any scene-specific threshold are
 still unconfirmed.
 
 The active event reader follows `main+0xBCC0B0` using mapped reads instead of
-calling the getter, which writes a string terminator. The adult Kakariko test
-capture was taken after the relocation, with Link grounded at full health.
-The map exporter finds two grotto fall-safety sensors and no standalone void
-sensor there. The pre-existing capture does not establish which native check
-caused this fall. The runtime trace retains the last active flow, its observed
-type and sample positions for an after-respawn capture.
+calling the getter, which writes a string terminator. The 1.1.1 adult Kakariko
+reproduction captured abyss type `1` at frame 3577, near the west cliff. Link's
+sampled feet rose from `(-87.992, 112.123, 73.582)` immediately before the flow
+to `(-88.076, 112.194, 73.648)` when it became active. Neither of the two placed
+grotto fall-safety sensors is near this point. The vertical line through the
+first active sample crosses baked stone collision at Y=111.691 and grass terrain
+at Y=113.546 in tile X3_Z4. These are nearby surfaces, with no evidence yet that
+either is the trigger. Type `1` is the generic result at `main+0x82C6DC`, which
+can be reached from more than one input. The next capture records player flags
+`+0x28`, contact flags `+0x13D0` and contact tags `+0x13E8` on the frames around
+flow activation. The reaction can consume some of these flags before sampling.

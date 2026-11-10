@@ -96,6 +96,7 @@ camera evidence to compare the two snapshots.
 In 1.1.1, reproduce the fall with the practice menu closed. After Link returns,
 take a Quick Snapshot or Deep Diagnostics. The manifest keeps the last observed
 `DmF_SY_FallDown`, the native abyss type if readable, and Link's coordinates
-before and during the event. It also logs the event to the SD card. The fall
+before and during the event. It also records the player and contact flags the
+native selector reads and logs the event to the SD card. The fall
 flow is shared by several abyss types, so its name alone does not identify the
 predicate that triggered it. See [FINDINGS](FINDINGS.md#96-abyss-event-tracing).

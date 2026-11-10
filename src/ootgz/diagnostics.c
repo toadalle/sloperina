@@ -20,13 +20,37 @@
 static char report[REPORT_CAPACITY];
 static size_t report_size;
 
+typedef struct {
+  uint32_t type, player_flags, contact_flags;
+  uint64_t contact_tags;
+  bool valid;
+} abyss_sample_t;
+
 static struct {
   char map[GD_STR_LEN];
   unsigned frame;
   uint32_t abyss_type;
   vec3f_t before, first, lowest;
+  abyss_sample_t before_inputs, active_inputs;
   bool has_before, has_position;
 } last_fall;
+
+static abyss_sample_t abyss_inputs(uintptr_t actor)
+{
+  uintptr_t components = actor ? sys_ptr(actor + 0x270) : 0;
+  uintptr_t player = components ? sys_ptr(components + 0x358) : 0;
+  if (!player || !sys_mapped(player, 0x1920, SYS_PERM_R) || sys_ptr(player + 0x18) != actor)
+    return (abyss_sample_t){0};
+  /* Inputs inspected by the type selector at main+0x82C510. The event can
+   * clear flags before our frame hook, so retain the previous sample too. */
+  return (abyss_sample_t){
+    .type = *(const volatile uint32_t *)(player + 0x191C),
+    .player_flags = *(const volatile uint32_t *)(player + 0x28),
+    .contact_flags = *(const volatile uint32_t *)(player + 0x13D0),
+    .contact_tags = *(const volatile uint64_t *)(player + 0x13E8),
+    .valid = true,
+  };
+}
 
 /* Read the active flow using the same pointer chain as main+0xBCC0B0.
  * The game's getter writes a terminator. Read only the known name here. */
@@ -58,12 +82,14 @@ bool diagnostics_fall_frame(void)
   static bool was_active, had_previous;
   static uintptr_t previous_actor;
   static vec3f_t previous;
+  static abyss_sample_t previous_inputs;
   if (!z64hd_game || !z64hd_game->event_flow_layout)
     return false;
   bool active = fall_flow_active();
   vec3f_t feet;
   uintptr_t actor = link_actor();
   bool have_feet = actor && link_drawn_pos(&feet);
+  abyss_sample_t inputs = abyss_inputs(actor);
   if (active && !was_active) {
     const char *map = gd_get_str(GD_STR_MAP);
     snprintf(last_fall.map, sizeof(last_fall.map), "%.63s", map ? map : "");
@@ -71,21 +97,16 @@ bool diagnostics_fall_frame(void)
     last_fall.abyss_type = 0;
     last_fall.has_before = had_previous && actor == previous_actor;
     last_fall.before = previous;
+    last_fall.before_inputs = actor == previous_actor ? previous_inputs : (abyss_sample_t){0};
+    last_fall.active_inputs = inputs;
     last_fall.has_position = false;
     log_printf("fall: DmF_SY_FallDown active frame=%u map=%.30s", last_fall.frame, last_fall.map);
     if (last_fall.has_before)
       log_printf("fall: previous feet %.3f %.3f %.3f", previous.x, previous.y, previous.z);
   }
-  if (active && actor && !last_fall.abyss_type) {
-    /* SelectorEventQueryCheckPlayerAbyssType (main+0x2B1B620) reads
-     * this field. Keep its raw value until the types have been mapped. */
-    uintptr_t components = sys_ptr(actor + 0x270);
-    uintptr_t player = components ? sys_ptr(components + 0x358) : 0;
-    uint32_t type;
-    if (player && sys_ptr(player + 0x18) == actor && sys_read32(player + 0x191C, &type) && type) {
-      last_fall.abyss_type = type;
-      log_printf("fall: native abyss type %u", type);
-    }
+  if (active && !last_fall.abyss_type && inputs.type) {
+    last_fall.abyss_type = inputs.type;
+    log_printf("fall: native abyss type %u", inputs.type);
   }
   if (active && have_feet) {
     if (!last_fall.has_position) {
@@ -100,6 +121,7 @@ bool diagnostics_fall_frame(void)
     previous = feet;
   had_previous = have_feet;
   previous_actor = actor;
+  previous_inputs = inputs;
   bool changed = was_active != active;
   was_active = active;
   return changed;
@@ -130,6 +152,13 @@ static void append(const char *format, ...)
   va_end(args);
   if (n > 0)
     report_size += (size_t)n < available ? (size_t)n : available - 1;
+}
+
+static void append_abyss_inputs(const char *phase, abyss_sample_t sample)
+{
+  if (sample.valid)
+    append("%s abyss inputs type=%u player=%#x contact=%#x tags=%#llx\n", phase,
+           sample.type, sample.player_flags, sample.contact_flags, (unsigned long long)sample.contact_tags);
 }
 
 static bool write_file(const char *dir, const char *name, const void *data, size_t size)
@@ -319,6 +348,8 @@ void diagnostics_dump(bool deep)
     append("Last observed DmF_SY_FallDown frame=%u map=%s\n", last_fall.frame, last_fall.map);
     if (last_fall.abyss_type)
       append("Native abyss type=%u\n", last_fall.abyss_type);
+    append_abyss_inputs("Previous frame", last_fall.before_inputs);
+    append_abyss_inputs("First active frame", last_fall.active_inputs);
     if (last_fall.has_before)
       append("Previous feet XYZ=%.3f %.3f %.3f\n", last_fall.before.x, last_fall.before.y, last_fall.before.z);
     if (last_fall.has_position) {
