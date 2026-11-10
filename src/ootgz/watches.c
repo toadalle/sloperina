@@ -8,6 +8,7 @@
 #include "input.h"
 #include "lang.h"
 #include "link.h"
+#include "levitate.h"
 #include "sys.h"
 #include "z64hd.h"
 
@@ -868,4 +869,8 @@ void watches_frame(bool menu_open)
     snprintf(line, sizeof(line), "%-12.12s %.40s", label, value);
     gfx_hud((gfx_corner_t)watches_corner, row++, GFX_NORMAL, line);
   }
+  /* Display the selected horizontal hover speed, separately from the measured
+   * world-space "speed" watch above. Do not change saved watch IDs or order. */
+  snprintf(line, sizeof(line), "%-12s %d", "flight speed", levitate_move_speed);
+  gfx_hud((gfx_corner_t)watches_corner, row, GFX_NORMAL, line);
 }

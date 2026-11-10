@@ -43,7 +43,8 @@ float hypotf(float x, float y); /* from sdk */
 bool levitate_enabled;
 bool levitate_through_walls;
 int levitate_speed = 4;       /* rise, units/s */
-int levitate_move_speed = 6;  /* stick, units/s */
+#define FLIGHT_SPEED_DEFAULT 6 /* original mod flight move speed */
+int levitate_move_speed = FLIGHT_SPEED_DEFAULT;  /* stick, units/s */
 
 /* Shared with the move-speed menu options: one Y/A tap moves one preset. */
 static const int flight_speeds[] = { 2, 4, 6, 8, 12, 20, 30 };
@@ -988,8 +989,14 @@ static void frame(bool menu_open)
       adjust_flight_speed(1);
   }
   if (!menu_open && floating && (input_pressed() & BTN_RSTICK)) {
-    levitate_through_walls = !levitate_through_walls;
-    gfx_notice(levitate_through_walls ? "ghost mode on" : "ghost mode off");
+    if (input_held() & BTN_R) {
+      /* R + R3 resets the flight-speed preset. Do not toggle ghost. */
+      levitate_move_speed = FLIGHT_SPEED_DEFAULT;
+      gfx_notice("flight speed reset: 6");
+    } else {
+      levitate_through_walls = !levitate_through_walls;
+      gfx_notice(levitate_through_walls ? "ghost mode on" : "ghost mode off");
+    }
   }
 
   if (search_running())

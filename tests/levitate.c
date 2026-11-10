@@ -210,7 +210,7 @@ static void test_vertical_controls(void)
   held = BTN_X;
   pressed = BTN_LSTICK;
   levitate_frame(false);
-  assert(floating && input_hide_from_game == (BTN_LSTICK | BTN_RSTICK | BTN_X | BTN_B));
+  assert(floating && input_hide_from_game == (BTN_LSTICK | BTN_RSTICK | BTN_X | BTN_B | BTN_Y | BTN_A));
   assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
   assert((input_hide_from_game & (BTN_Y | BTN_A)) == (BTN_Y | BTN_A));
   levitate_frame(false); /* second L3 press turns it off in the same frame */
@@ -249,9 +249,18 @@ static void test_flight_speed_buttons(void)
   held = pressed = BTN_A | BTN_Y;
   levitate_frame(false);
   assert(levitate_move_speed == 30); /* simultaneous presses cancel */
+  levitate_through_walls = true;
+  held = BTN_R | BTN_RSTICK;
+  pressed = BTN_RSTICK;
+  levitate_frame(false);
+  assert(levitate_move_speed == 6 && levitate_through_walls); /* R+R3 reset, no ghost toggle */
+  held = pressed = BTN_RSTICK;
+  levitate_frame(false);
+  assert(!levitate_through_walls && levitate_move_speed == 6); /* plain R3 toggles ghost */
+  levitate_move_speed = 30;
   levitate_frame(true);
   assert(levitate_move_speed == 30); /* menu A/Y does not change flight speed */
-  puts("PASS: Y/A bounded flight speed presets, no held-repeat, gameplay masking and menu guard");
+  puts("PASS: Y/A bounded flight speed, R+R3 default reset/ghost isolation, masking and menu guard");
 }
 
 static void test_ghost_toggle(void)

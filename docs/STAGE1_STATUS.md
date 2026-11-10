@@ -155,3 +155,8 @@ count as Fritchii runtime validation.
 ### Confirmed normal-hover collision failure
 
 Fritchii runtime feedback confirms **normal hover (ghost OFF) can force Link through colliders**. Current `respect_walls()` is a heuristic that detects/reconciles some game push-back, but `float_step()` still directly overwrites the physics position record every frame. This is *not* reliable wall collision. Do not describe the non-ghost mode as collision-safe. Codex should identify and use a native controller sweep/slide/shape cast, or move Link through a normal collision-aware physics API; if none can be established, prioritize conservative behavior rather than pretending the push-back heuristic is sufficient. Validate hard corners, thin walls, floors, ceilings, ledges, high flight speed, and transitions. Preserve verified ghost ForceNoHit and explicit camera/action independence.
+
+### Flight-speed reset and watch HUD
+
+- R + R3 (right-stick click) while levitating resets horizontal flight speed to the original mod's default of **6 units/s**, with priority over the R3 ghost toggle. Plain R3 still toggles ghost. This is the hover preset, **not** a modification to ordinary grounded Link movement speed.
+- The bottom-left watches HUD includes a separate `flight speed` row for the selected hover movement-speed setting. The existing `speed` row remains a measured Link velocity. The additional line is deliberately outside the persisted watch IDs, avoiding saved-ID migration; it follows watch HUD visibility and placement.
