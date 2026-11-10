@@ -30,19 +30,33 @@ int main(void)
   input_update();
   npad_state_t sample = raw;
   filter_game_states(&sample, 1, 0, NPAD_NO1);
-  assert(!sample.buttons && input_action_chord(PRACTICE_MENU_COMBO));
+  assert(!sample.buttons && input_shortcut(PRACTICE_MENU_COMBO));
+  raw.buttons = BTN_A;
+  input_update();
+  assert(!input_shortcut(PRACTICE_MENU_COMBO));
+  raw.buttons = PRACTICE_MENU_COMBO | BTN_ZR;
+  input_update();
+  assert(input_shortcut(PRACTICE_MENU_COMBO)); /* D-pad completes a held A */
+  sample = raw;
+  filter_game_states(&sample, 1, 0, NPAD_NO1);
+  assert(sample.buttons == BTN_ZR);
   input_set_native_ui(true);
   input_hide_from_game = BTN_A | BTN_B | BTN_X | BTN_Y;
   sample = raw;
   filter_game_states(&sample, 1, 0, NPAD_NO1);
-  assert(sample.buttons == PRACTICE_MENU_COMBO); /* preserve the ocarina note */
+  assert(sample.buttons == (PRACTICE_MENU_COMBO | BTN_ZR)); /* preserve the ocarina note */
   sample.buttons = BTN_A | BTN_B;
   filter_game_states(&sample, 1, 0, NPAD_NO1);
   assert(sample.buttons == (BTN_A | BTN_B)); /* preserve dialogue controls */
   input_set_native_ui(false);
   input_hide_from_game = 0;
   raw.sampling_number++;
+  raw.buttons = BTN_DLEFT;
+  input_update();
+  assert(!input_shortcut(MINI_HUD_COMBO));
   raw.buttons = MINI_HUD_COMBO;
+  input_update();
+  assert(input_shortcut(MINI_HUD_COMBO));
   sample = raw;
   filter_game_states(&sample, 1, 0, NPAD_NO1);
   assert(!sample.buttons);
@@ -56,7 +70,7 @@ int main(void)
   sample = raw;
   filter_game_states(&sample, 1, 0, NPAD_NO1);
   assert(!sample.buttons && !sample.lx && !sample.ry);
-  assert(input_pressed() & BTN_B); /* the menu still receives raw controls */
+  assert(input_held() & BTN_B); /* the menu still receives raw controls */
 
   input_set_menu_block(false);
   npad_state_t history[2] = { raw, raw };

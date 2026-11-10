@@ -6,9 +6,7 @@
  * ("Locating Link's start position"), rather than acting later out of the blue; the next press works.
  * Saving needs the record so that the load after it is instant.
  *
- * A load waits until R and the d-pad of the shortcut are let go: holding R brings up the game's item
- * wheel, which freezes gameplay, and a frozen Link ignores a new position (every load made while they
- * were held failed). "loading position" shows at once, as "position saved" does (saving only reads, so
+ * A load waits for both shortcut buttons to be released. "loading position" shows at once, as "position saved" does (saving only reads, so
  * it doesn't wait), and "position loaded" when he's there. It's then checked: done once
  * Link is drawn there; otherwise written again a few times, and if it never takes, the record is put
  * back where Link is (so it isn't "lost" and searched for again). */
@@ -21,8 +19,6 @@
 #include "link.h"
 #include "sys.h"
 
-#define SAVE_COMBO (BTN_R | BTN_DUP)
-#define LOAD_COMBO (BTN_R | BTN_DDOWN)
 #define SETTLE 20       /* frames for a load to show: checked each frame, then given up */
 #define MAX_WRITES 4    /* written again every RETRY_EVERY frames until Link is there */
 #define RETRY_EVERY 3
@@ -143,10 +139,13 @@ static void settle_step(void)
 
 void position_frame(bool menu_open)
 {
-  if (!menu_open && input_combo(SAVE_COMBO))
+  if (!menu_open && input_shortcut(SAVE_POSITION_COMBO)) {
+    input_suppress_until_release(SAVE_POSITION_COMBO);
     position_save();
-  else if (!menu_open && input_combo(LOAD_COMBO))
+  } else if (!menu_open && input_shortcut(LOAD_POSITION_COMBO)) {
+    input_suppress_until_release(LOAD_POSITION_COMBO);
     position_load();
+  }
 
   link_record_status_t st = link_record_status();
   if (finding && st == REC_READY) {
@@ -157,14 +156,14 @@ void position_frame(bool menu_open)
     gfx_notice("Link's position not found, move around and try again");
   }
 
-  if (pending && st == REC_READY && !(input_held() & LOAD_COMBO)) {
+  if (pending && !menu_open && st == REC_READY && !(input_held() & LOAD_POSITION_COMBO)) {
     pending = false;
     writes = 0;
     if (write_saved()) {
       settle = SETTLE;
       log_printf("position load: writing %.3f %.3f %.3f", sx, sy, sz);
     }
-  } else if (settle) {
+  } else if (settle && !menu_open) {
     settle_step();
   }
 }

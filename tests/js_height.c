@@ -97,7 +97,8 @@ uint32_t frame_counter(void) { return 0; }
 uint64_t sys_tick(void) { return 1; }
 uint64_t sys_tick_freq(void) { return 1000; }
 uint32_t input_held(void) { return 0; }
-bool input_action_chord(uint32_t combo) { (void)combo; return false; }
+bool input_shortcut(uint32_t combo) { (void)combo; return false; }
+uint32_t input_shortcut_held(void) { return 0; }
 static uint32_t menu_pressed;
 uint32_t input_pressed(void) { return menu_pressed; }
 bool input_repeat(uint32_t button) { (void)button; return false; }

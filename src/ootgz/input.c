@@ -142,14 +142,22 @@ void input_set_native_ui(bool owned)
   __atomic_store_n(&native_ui_owns_input, owned, __ATOMIC_RELEASE);
 }
 
-static bool action_chord(uint64_t buttons, uint32_t combo)
+static uint32_t shortcut_mask(uint64_t buttons)
 {
-  return (buttons & (BTN_L | BTN_R | BTN_A | PRACTICE_CHORD_EXCLUDED)) == combo;
+  uint32_t directions = buttons & (BTN_DLEFT | BTN_DRIGHT);
+  if (directions == BTN_DLEFT)
+    return (buttons & BTN_B) ? MINI_HUD_COMBO : 0;
+  if (directions != BTN_DRIGHT)
+    return 0;
+  uint32_t action = buttons & PRACTICE_RIGHT_ACTIONS;
+  return action && !(action & (action - 1)) ? BTN_DRIGHT | action : 0;
 }
 
-bool input_action_chord(uint32_t combo)
+uint32_t input_shortcut_held(void) { return shortcut_mask(buttons_held); }
+
+bool input_shortcut(uint32_t combo)
 {
-  return (buttons_pressed & BTN_A) && action_chord(buttons_held, combo);
+  return (buttons_pressed & combo) && input_shortcut_held() == combo;
 }
 
 bool input_menu_releasing(void) { return menu_releasing; }
@@ -218,8 +226,7 @@ static void filter_game_states(void *states, int count, int style, uint32_t id)
     npad_state_t *state = (npad_state_t *)((char *)states + i * NPAD_STATE_SIZE);
     /* Hide both halves of a reserved chord before vanilla can start
      * a quick-swap or action from the same sample. */
-    uint32_t shortcut = action_chord(state->buttons, PRACTICE_MENU_COMBO) ? PRACTICE_MENU_COMBO :
-                        action_chord(state->buttons, MINI_HUD_COMBO) ? MINI_HUD_COMBO : 0;
+    uint32_t shortcut = shortcut_mask(state->buttons);
     if (block || (cutoff && state->sampling_number <= cutoff)) {
       state->buttons = 0;
       state->lx = state->ly = state->rx = state->ry = 0;

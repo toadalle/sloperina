@@ -54,6 +54,14 @@ void sys_regions(uint32_t perm, void (*fn)(uintptr_t, size_t, void *), void *ctx
 uint64_t sys_tick(void) { return 100; }
 uint64_t sys_tick_freq(void) { return 1000; }
 uint32_t input_held(void) { return held; }
+uint32_t input_shortcut_held(void)
+{
+  if ((held & (BTN_DLEFT | BTN_B)) == MINI_HUD_COMBO)
+    return MINI_HUD_COMBO;
+  uint32_t action = held & PRACTICE_RIGHT_ACTIONS;
+  return (held & BTN_DRIGHT) && action && !(action & (action - 1)) ? BTN_DRIGHT | action : 0;
+}
+bool input_shortcut(uint32_t combo) { return input_shortcut_held() == combo && (pressed & combo); }
 uint32_t input_pressed(void) { return pressed; }
 void input_sticks(int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry)
 { *lx = stick_x; *ly = *rx = *ry = 0; }
@@ -290,31 +298,31 @@ static void test_walk_wall_shortcut(void)
   start(false);
   floating = moving_link = false;
   cheats[CHEAT_WALLS] = false;
-  held = BTN_R | BTN_RSTICK;
+  held = HOVER_ACTION_COMBO;
   pressed = BTN_RSTICK;
   levitate_frame(false, false);
   assert(cheats[CHEAT_WALLS] && !floating && !levitate_through_walls);
-  held = BTN_R;
+  held = BTN_DRIGHT;
   pressed = 0;
   levitate_frame(false, false);
   assert(cheats[CHEAT_WALLS]);
-  held = BTN_R | BTN_RSTICK;
+  held = HOVER_ACTION_COMBO;
   pressed = BTN_RSTICK;
   levitate_frame(false, false);
   assert(!cheats[CHEAT_WALLS]);
   start(false);
   cheats[CHEAT_WALLS] = false;
-  held = BTN_R | BTN_RSTICK;
+  held = HOVER_ACTION_COMBO;
   pressed = BTN_RSTICK;
   levitate_frame(true, false);
   assert(!cheats[CHEAT_WALLS]); /* practice menu doesn't toggle */
   start(false);
   cheats[CHEAT_WALLS] = false;
-  held = BTN_R | BTN_RSTICK;
+  held = HOVER_ACTION_COMBO;
   pressed = BTN_RSTICK;
   levitate_frame(false, false);
   assert(floating && levitate_move_speed == 6 && !cheats[CHEAT_WALLS]);
-  puts("PASS: walking R+R3 toggles existing wall pass, hover resets speed, menu guard");
+  puts("PASS: walking D-right+R3 toggles existing wall pass, hover resets speed, menu guard");
 }
 
 static void test_transition_handoff(void)
@@ -364,24 +372,24 @@ static void test_flight_speed_buttons(void)
   levitate_frame(false, false);
   assert(levitate_move_speed == 30); /* simultaneous presses cancel */
   levitate_through_walls = true;
-  held = BTN_R | BTN_RSTICK;
+  held = HOVER_ACTION_COMBO;
   pressed = BTN_RSTICK;
   levitate_frame(false, false);
-  assert(levitate_move_speed == 6 && levitate_through_walls); /* R+R3 reset, no ghost toggle */
+  assert(levitate_move_speed == 6 && levitate_through_walls); /* D-right+R3 reset, no ghost toggle */
   held = pressed = BTN_RSTICK;
   levitate_frame(false, false);
   assert(!levitate_through_walls && levitate_move_speed == 6); /* plain R3 toggles ghost */
   levitate_move_speed = 30;
   levitate_frame(true, false);
   assert(levitate_move_speed == 30); /* menu A/Y does not change flight speed */
-  puts("PASS: Y/A bounded flight speed, R+R3 default reset/ghost isolation, masking and menu guard");
+  puts("PASS: Y/A bounded flight speed, D-right+R3 default reset/ghost isolation, masking and menu guard");
 }
 
 static void test_ghost_toggle(void)
 {
   start(false);
   floating = moving_link = false;
-  held = BTN_R | BTN_LSTICK;
+  held = BTN_DRIGHT | BTN_LSTICK;
   pressed = BTN_LSTICK;
   levitate_frame(false, false);
   assert(!floating); /* frame-advance chord must not also toggle hover */

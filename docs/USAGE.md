@@ -18,7 +18,7 @@ A quick guide to get you practising. For every option in every menu, see the [ma
    sloperinaGZ works with **The Legend of Zelda: Ocarina of Time (Switch 2), versions 1.0.0 and 1.1.1**.
 2. **Start the game.** For a few seconds the bottom-right corner shows sloperinaGZ's name, version and
    build date, the website, and how to open the menu. That means it's running.
-3. **Open the menu:** press **R + A**. Press the chord again to close it.
+3. **Open the menu:** press **D-pad right + A**. Press the chord again to close it.
 
 The menu freezes the game over a captured backdrop by default on supported
 builds. Turn off **Settings > Freeze game while open** for live inspection.
@@ -30,8 +30,8 @@ Navigate with the D-pad or left stick. **A** selects and **B** goes back.
 
 | Button | In the menu |
 |---|---|
-| **R + A** | Open or close the menu |
-| **L + A** | Toggle the mini-HUD during gameplay |
+| **D-pad right + A** | Open or close the menu |
+| **D-pad left + B** | Toggle the mini-HUD during gameplay |
 | **D-pad up / down** | Move up and down the list |
 | **D-pad left / right** | Change a value (switches, numbers), or pick a button on a row of buttons |
 | **A** | Open a menu, tick a box or activate an action |
@@ -57,16 +57,19 @@ These work with the menu closed.
 
 | Shortcut | What it does |
 |---|---|
-| **R + right stick down** | Open the menu |
-| **R + D-pad right** | Show or hide the watches |
-| **R + A + D-pad left** | Start or stop the timer |
-| **R + B + D-pad left** | Reset the timer |
-| **R + B + D-pad right** | Reset the lag counter |
+| **D-pad right + A** | Open the menu |
+| **D-pad left + B** | Toggle the mini-HUD |
+| **D-pad right + B** | Start or stop the timer |
+| **D-pad right + Minus** | Reset the timer |
+| **D-pad right + Plus** | Reset the lag counter |
+| **D-pad right + ZL** | Reset JS Height |
+| **D-pad right + X / Y** | Save / load position |
+| **D-pad right + R3** | Reset flight speed in hover, or toggle walking wall-pass |
 | **L3** | Levitate: start floating / drop (when it's turned on in settings) |
 | **X / B** (held, while floating) | Levitate up / down; release to hover |
 | **R3** (held, while floating) | Hold height even if X/B is held |
-| **L** (or **R**) | Frame advance: pause, then one frame per tap, frames continuously while held (on at first; **settings > frame advance**) |
-| **L + L3** (or **R + L3**) | Frame advance: let the game run again |
+| **L** (or **D-pad right**) | Frame advance: pause, then one frame per tap, frames continuously while held (on at first; **settings > frame advance**) |
+| **L + L3** (or **D-pad right + L3**) | Frame advance: let the game run again |
 
 Everything you do shows for a moment in the bottom-right corner (gz's log), for example `infinite magic on` or
 `warp to kokiri forest`.
@@ -146,9 +149,9 @@ the SD card in `sloperinaGZ/settings.ini`, plain text you can edit. Your game sa
 
 - **Nothing happens when I press R + right stick down.** Check the sloperinaGZ splash showed at start-up. If not,
   sloperinaGZ needs the module and the IPS for the active game build. See [INSTALLATION.md](../INSTALLATION.md).
-- **The game doesn't react to a button.** Frame advance takes **L** (or **R**) away from the game while it's on,
+- **The game doesn't react to a button.** Frame advance takes **L** (or **D-pad right**) away from the game while it's on,
   levitate takes **L3**, plus **X/B/R3** while floating. Turn them off in **settings** if you need those buttons.
-- **The screen froze.** Frame advance may have paused the game: press **L + L3** (or **R + L3**).
+- **The screen froze.** Frame advance may have paused the game: press **L + L3** (or **D-pad right + L3**).
 - **Something I ticked didn't change in the game.** Some things only show after the game redraws them: open and
   close the pause screen, or go through a loading zone. Story stages apply after a loading zone.
 - **"settings won't be kept".** The game couldn't open the SD card; everything works, it just won't remember your

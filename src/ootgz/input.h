@@ -16,11 +16,17 @@ enum {
   BTN_RS_LEFT = 1u << 20, BTN_RS_UP = 1u << 21, BTN_RS_RIGHT = 1u << 22, BTN_RS_DOWN = 1u << 23,
 };
 
-/* Dedicated practice-menu activation chord. The HID wrapper uses the same constant
- * so Plus can be hidden from the game on the exact read that sees the chord. */
-#define PRACTICE_MENU_COMBO (BTN_R | BTN_A)
-#define MINI_HUD_COMBO (BTN_L | BTN_A)
-#define PRACTICE_CHORD_EXCLUDED (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT)
+/* Shared practice shortcuts for input dispatch and HID filtering. */
+#define PRACTICE_MENU_COMBO (BTN_DRIGHT | BTN_A)
+#define MINI_HUD_COMBO      (BTN_DLEFT | BTN_B)
+#define SAVE_POSITION_COMBO (BTN_DRIGHT | BTN_X)
+#define LOAD_POSITION_COMBO (BTN_DRIGHT | BTN_Y)
+#define HOVER_ACTION_COMBO  (BTN_DRIGHT | BTN_RSTICK)
+#define TIMER_TOGGLE_COMBO  (BTN_DRIGHT | BTN_B)
+#define TIMER_RESET_COMBO   (BTN_DRIGHT | BTN_MINUS)
+#define LAG_RESET_COMBO     (BTN_DRIGHT | BTN_PLUS)
+#define JS_RESET_COMBO      (BTN_DRIGHT | BTN_ZL)
+#define PRACTICE_RIGHT_ACTIONS (BTN_A | BTN_B | BTN_X | BTN_Y | BTN_RSTICK | BTN_MINUS | BTN_PLUS | BTN_ZL)
 
 void     input_update(void);       /* once per frame, from the frame hook */
 uint32_t input_held(void);
@@ -37,7 +43,8 @@ void     input_suppress_until_release(uint32_t mask);
  * suppression of held buttons and sticks until they return to neutral. */
 void input_set_menu_block(bool block);
 void input_set_native_ui(bool owned);
-bool input_action_chord(uint32_t combo); /* an A press with only the intended bumper */
+bool input_shortcut(uint32_t combo); /* either button completes the chord */
+uint32_t input_shortcut_held(void);
 bool input_menu_releasing(void); /* game thread: mod gameplay shortcuts stay suppressed too */
 /* Buttons the game never sees (e.g. L while levitate is on). */
 extern uint32_t input_hide_from_game;

@@ -392,10 +392,10 @@ static void build_link(void)
   menu_item_t *reload = menu_add_action(&m_link, "reload map", act_reload_map, 0);
   if (reload)
     reload->hint = "A: reload this map at the age above";
-  menu_item_t *save = menu_add_action(&m_link, "save position (R + d-up)", act_save_position, 0);
+  menu_item_t *save = menu_add_action(&m_link, "save position (D-right + X)", act_save_position, 0);
   if (save)
     save->hint = "A: remember where Link is and which way he faces";
-  menu_item_t *load = menu_add_action(&m_link, "load position (R + d-down)", act_load_position, 0);
+  menu_item_t *load = menu_add_action(&m_link, "load position (D-right + Y)", act_load_position, 0);
   if (load)
     load->hint = "A: put Link back there (same map only)";
   /* read-only status after a blank line */
@@ -1780,7 +1780,7 @@ static void fill_watches(void)
   menu_add_heading(&m_watches, "JS Height");
   menu_item_t *reset_js = menu_add_action(&m_watches, "Reset JS Height", act_js_height_reset, 0);
   if (reset_js)
-    reset_js->hint = "A: set the threshold to maximum once (also R + A + d-right)";
+    reset_js->hint = "A: set the threshold to maximum once (also D-right + ZL)";
   menu_item_t *lock_js = menu_add_check(&m_watches, "Lock JS Height", get_js_height_lock, set_js_height_lock, 0);
   if (lock_js)
     lock_js->hint = "Keep maximum height each frame; off after restarting";
@@ -1858,6 +1858,11 @@ static void text_air_wall_summary(menu_item_t *it, char *buf, int len)
   snprintf(buf, len, TF("count  %s"), summary);
 }
 
+static void text_nearest_death(menu_item_t *it, char *buf, int len)
+{
+  airwall_nearest_death(buf, len);
+}
+
 static void text_air_wall_link(menu_item_t *it, char *buf, int len)
 {
   char text[64];
@@ -1902,6 +1907,7 @@ static void build_scene(void)
     all_kinds->log_label = "all kinds:";
   }
   menu_add_text(&m_collision, text_air_wall_summary, 0);
+  menu_add_text(&m_collision, text_nearest_death, 0);
   menu_add_text(&m_collision, text_air_wall_link, 0);
 }
 
@@ -2090,7 +2096,7 @@ static void text_levitate(menu_item_t *it, char *buf, int len)
 }
 
 /* frame advance */
-static const char *const fa_button_names[] = { "L", "R" };
+static const char *const fa_button_names[] = { "L", "D-pad right" };
 
 static bool get_fa(menu_item_t *it)
 {
@@ -2227,7 +2233,7 @@ static void build_settings(void)
   menu_item_t *mini_hud = menu_add_check(&m_settings, "show gameplay mini-HUD", get_shown,
                                           set_shown, 0);
   if (mini_hud)
-    mini_hud->hint = "Show the Sloperina watch panel during gameplay. L + A toggles it";
+    mini_hud->hint = "Show the Sloperina watch panel during gameplay. D-left + B toggles it";
   menu_add_submenu(&m_settings, "about", &m_about);
 
   /* Built here because their settings are persisted; linked from functional categories below. */
@@ -2635,7 +2641,7 @@ void menus_splash(void)
   static char title[64], date[64];
   snprintf(title, sizeof(title), "sloperinaGZ - %s", BUILD_VERSION);
   snprintf(date, sizeof(date), TF("Build Date: %s"), BUILD_WHEN);
-  const char *lines[] = { title, date, "practicerom.com/oothd", 0, T("R + A: open the menu") };
+  const char *lines[] = { title, date, "practicerom.com/oothd", 0, T("D-right + A: open the menu") };
   static const uint8_t styles[] = { GFX_DIM, GFX_DIM, GFX_LOG, GFX_LOG, GFX_NORMAL };
   static const uint8_t indents[] = { 0, 0, 0, 0, 0 };
   gfx_splash(lines, styles, indents, ARRAY_LEN(lines), SPLASH_FRAMES);

@@ -157,6 +157,9 @@ static double abs_double(double v)
 
 #define MAX_REGIONS 16384
 #define SCAN_PER_FRAME (16u << 20)
+#define FAST_SCAN_PER_FRAME (128u << 20)
+#define FAST_SCAN_LIMIT (1024u << 20)
+#define FAST_SCAN_STRIDE 0x100u /* alignment observed in 1.1.1 captures, not assumed in fallback */
 #define MAX_TESTS_PER_SEARCH 6
 static struct { uintptr_t lo, hi; } heap_regions[MAX_REGIONS];
 static int n_heap_regions;
@@ -165,7 +168,7 @@ static uintptr_t scan_pos; /* the next address to look at */
 static int n_tested;
 static uintptr_t scan_origin;
 static uintptr_t last_found, last_found_actor; /* hint, always test again after invalidation */
-static bool scan_initialized;
+static bool scan_initialized, fast_scan;
 static size_t bytes_scanned;
 
 typedef struct { uintptr_t addr; double error; } candidate_t;
@@ -247,6 +250,7 @@ static void search_start(bool quiet)
     return;
   record_actor = link;
   scan_initialized = false;
+  fast_scan = true;
   bytes_scanned = 0;
   n_tested = 0;
   quiet_search = quiet;
@@ -287,24 +291,28 @@ static bool record_matches(uintptr_t addr, double *error)
 /* Scan on until a match (returns true, in `candidate`) or this frame's budget is used. */
 static bool scan_step(void)
 {
-  size_t budget = SCAN_PER_FRAME;
+  size_t stride = fast_scan ? FAST_SCAN_STRIDE : sizeof(double);
+  size_t budget = fast_scan ? FAST_SCAN_PER_FRAME : SCAN_PER_FRAME;
+  if (fast_scan && budget > FAST_SCAN_LIMIT - bytes_scanned)
+    budget = FAST_SCAN_LIMIT - bytes_scanned;
   if (!link_drawn_pos(&search_pos))
     return false;
   while (scan_region < n_heap_regions && budget) {
-    uintptr_t end = heap_regions[scan_region].hi - RECORD_SIZE;
+    uintptr_t end = heap_regions[scan_region].hi - RECORD_SIZE + 1;
     uintptr_t stop = scan_pos + budget < end ? scan_pos + budget : end;
-    if (stop <= scan_pos || !sys_mapped(scan_pos, stop - scan_pos + RECORD_SIZE, SYS_PERM_R | SYS_PERM_W)) {
+    if (stop <= scan_pos || !sys_mapped(scan_pos, stop - scan_pos + RECORD_SIZE - 1, SYS_PERM_R | SYS_PERM_W)) {
       if (++scan_region < n_heap_regions)
         scan_pos = heap_regions[scan_region].lo;
       continue;
     }
-    for (uintptr_t p = scan_pos; p < stop; p += 8) {
+    for (uintptr_t p = (scan_pos + stride - 1) & ~(stride - 1); p < stop; p += stride) {
       double error;
       if (record_matches(p, &error)) {
         candidate.addr = p;
         candidate.error = error;
-        bytes_scanned += p + 8 - scan_pos;
-        scan_pos = p + 8;
+        uintptr_t next = p + stride < stop ? p + stride : stop;
+        bytes_scanned += next - scan_pos;
+        scan_pos = next;
         return true;
       }
     }
@@ -399,6 +407,16 @@ static void cancel_search(void)
     search_state = SEARCH_IDLE;
 }
 
+static void start_full_scan(void)
+{
+  fast_scan = false;
+  scan_region = 0;
+  scan_pos = n_heap_regions ? heap_regions[0].lo : 0;
+  bytes_scanned = 0;
+  n_tested = 0;
+  log_printf("levitate: aligned search ended; checking all record addresses");
+}
+
 static void test_step(void)
 {
   if (!sys_mapped(candidate.addr, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W)) {
@@ -413,8 +431,8 @@ static void test_step(void)
     record_has_motion = true;
     last_found = record;
     last_found_actor = record_actor;
-    log_printf("levitate: Link's physics record is %#lx (moved him; scanned %u MiB)", (unsigned long)record,
-               (unsigned)(bytes_scanned >> 20));
+    log_printf("levitate: Link record %#lx (%s search, %u MiB span)", (unsigned long)record,
+               fast_scan ? "aligned" : "full", (unsigned)(bytes_scanned >> 20));
     search_state = SEARCH_READY;
     return;
   }
@@ -422,9 +440,12 @@ static void test_step(void)
     return;
   restore_test_lift();
   if (n_tested >= MAX_TESTS_PER_SEARCH) {
-    log_printf("levitate: %d matches didn't move Link", n_tested);
-    search_failed();
-    return;
+    if (!fast_scan) {
+      log_printf("levitate: %d matches didn't move Link", n_tested);
+      search_failed();
+      return;
+    }
+    start_full_scan();
   }
   search_state = SEARCH_FINDING; /* carry on scanning */
 }
@@ -569,7 +590,8 @@ static void float_start(void)
 static void steer(double dt)
 {
   float_clock += dt;
-  int vertical = !!(input_held() & BTN_X) - !!(input_held() & BTN_B);
+  uint32_t buttons = input_held() & ~input_shortcut_held();
+  int vertical = !!(buttons & BTN_X) - !!(buttons & BTN_B);
   double move = levitate_move_speed;
   double rise = (levitate_speed > 0 ? levitate_speed : 4) * move / FLIGHT_SPEED_DEFAULT;
   if (!vertical || vel_y * vertical < 0)
@@ -637,7 +659,7 @@ static void float_step(double dt, bool menu_open)
     return;
   }
   last_drawn = drawn;
-  uint32_t buttons = input_held();
+  uint32_t buttons = input_held() & ~input_shortcut_held();
   int vertical = !!(buttons & BTN_X) - !!(buttons & BTN_B);
   bool descend_through_floor = !menu_open && levitate_through_walls && vertical < 0;
   if (cy > pos_y && !descend_through_floor && !cct_noclip_active())
@@ -902,8 +924,8 @@ static void handle_l3(bool menu_open)
 {
   if (!levitate_enabled) {
     drop();
-  } else if (!menu_open && (input_pressed() & BTN_LSTICK) && !(input_held() & (BTN_L | BTN_R))) {
-    /* L/R + L3 is reserved by frame advance; avoid a hover toggle as a side effect. */
+  } else if (!menu_open && (input_pressed() & BTN_LSTICK) && !(input_held() & (BTN_L | BTN_DRIGHT))) {
+    /* L or D-right + L3 is reserved by frame advance; avoid a hover toggle as a side effect. */
     if (levitate_reset_speed)
       levitate_move_speed = FLIGHT_SPEED_DEFAULT;
     if (floating) {
@@ -913,7 +935,7 @@ static void handle_l3(bool menu_open)
       floating = true;
       levitate_through_walls = false; /* always enter hover with normal collision */
       quiet_search = false;
-      gfx_notice("levitate on");
+      gfx_notice(search_state == SEARCH_READY ? "levitate on" : "hover: locating Link");
     }
   }
 }
@@ -932,6 +954,8 @@ static bool search_running(void)
     }
     if (scan_step()) {
       test_start(); /* if it changed after scanning, advance to the next match */
+    } else if (fast_scan && (bytes_scanned >= FAST_SCAN_LIMIT || scan_region >= n_heap_regions)) {
+      start_full_scan();
     } else if (scan_region >= n_heap_regions) {
       log_printf("levitate: no match in %u MiB of heap (%d tested)", (unsigned)(bytes_scanned >> 20), n_tested);
       search_failed();
@@ -1066,26 +1090,27 @@ static void frame(bool menu_open)
   handle_l3(menu_open);
   if (!menu_open && floating) {
     uint32_t speed_buttons = input_pressed() & (BTN_Y | BTN_A);
-    if (input_held() & (BTN_L | BTN_R))
-      speed_buttons &= ~BTN_A;
+    if (input_shortcut_held())
+      speed_buttons = 0;
     /* Both pressed at once are a no-op; other input stays fully available. */
     if (speed_buttons == BTN_Y)
       adjust_flight_speed(-1);
     else if (speed_buttons == BTN_A)
       adjust_flight_speed(1);
   }
-  /* R + R3 is contextual: flight-speed reset in hover, and an ordinary
+  /* D-right + R3 is contextual: flight-speed reset in hover, and an ordinary
    * walking wall-pass toggle otherwise. Reuse the existing wall bypass,
    * which leaves standard floor collision on until actually blocked and
    * holds the current feet height only during a pass. */
-  if (!menu_open && !floating && (input_held() & BTN_R) && (input_pressed() & BTN_RSTICK)) {
+  if (!menu_open && !floating && input_shortcut(HOVER_ACTION_COMBO)) {
     cheats[CHEAT_WALLS] = !cheats[CHEAT_WALLS];
-    input_suppress_until_release(BTN_RSTICK);
+    input_suppress_until_release(HOVER_ACTION_COMBO);
     gfx_notice(cheats[CHEAT_WALLS] ? "walk through walls on" : "walk through walls off");
   }
-  if (!menu_open && floating && (input_pressed() & BTN_RSTICK)) {
-    if (input_held() & BTN_R) {
-      /* R + R3 resets the flight-speed preset. Do not toggle ghost. */
+  if (!menu_open && floating && (input_shortcut(HOVER_ACTION_COMBO) || (input_pressed() & BTN_RSTICK))) {
+    if (input_shortcut_held() == HOVER_ACTION_COMBO) {
+      input_suppress_until_release(HOVER_ACTION_COMBO);
+      /* D-right + R3 resets the flight-speed preset. Do not toggle ghost. */
       levitate_move_speed = FLIGHT_SPEED_DEFAULT;
       gfx_notice("flight speed reset: 6");
     } else {

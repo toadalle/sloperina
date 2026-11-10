@@ -819,25 +819,33 @@ void watch_set_label(int index, const char *label)
 /* gz's commands, while the menu is closed; the three-button ones first */
 static void command_input(void)
 {
-  uint32_t held = input_held();
-  if (input_combo(BTN_R | BTN_A | BTN_DLEFT)) {
-    timer_toggle();
-    gfx_notice("timer started/stopped");
-  } else if (input_combo(BTN_R | BTN_B | BTN_DLEFT)) {
-    timer_reset();
-    gfx_notice("timer reset");
-  } else if (input_combo(BTN_R | BTN_B | BTN_DRIGHT)) {
-    lag_reset();
-    gfx_notice("lag counter reset");
-  } else if (input_combo(BTN_R | BTN_A | BTN_DRIGHT)) {
-    gfx_notice(js_height_reset() ? "JS Height reset" : "JS Height: Link not found");
-  } else if (input_action_chord(MINI_HUD_COMBO) ||
-             (input_combo(BTN_R | BTN_DRIGHT) && !(held & (BTN_A | BTN_B)))) {
-    if (input_action_chord(MINI_HUD_COMBO))
-      input_suppress_until_release(BTN_A);
-    watches_shown = !watches_shown;
-    gfx_notice(watches_shown ? "mini-HUD shown" : "mini-HUD hidden");
+  uint32_t shortcut = input_shortcut_held();
+  if (!shortcut || !input_shortcut(shortcut))
+    return;
+  switch (shortcut) {
+    case TIMER_TOGGLE_COMBO:
+      timer_toggle();
+      gfx_notice("timer started/stopped");
+      break;
+    case TIMER_RESET_COMBO:
+      timer_reset();
+      gfx_notice("timer reset");
+      break;
+    case LAG_RESET_COMBO:
+      lag_reset();
+      gfx_notice("lag counter reset");
+      break;
+    case JS_RESET_COMBO:
+      gfx_notice(js_height_reset() ? "JS Height reset" : "JS Height: Link not found");
+      break;
+    case MINI_HUD_COMBO:
+      watches_shown = !watches_shown;
+      gfx_notice(watches_shown ? "mini-HUD shown" : "mini-HUD hidden");
+      break;
+    default:
+      return;
   }
+  input_suppress_until_release(shortcut);
 }
 
 void watches_frame(bool menu_open)

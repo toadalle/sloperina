@@ -25,6 +25,7 @@ bool airwalls_shown, airwalls_all;
 bool loading_zones_shown, void_zones_shown;
 
 #define AW_RANGE 60.0f
+#define DEATH_RANGE 120.0f
 #define MAX_WALLS 512
 #define MAX_POINTS 8192
 #define MAX_EDGES 16384
@@ -520,7 +521,8 @@ static int sort_near_walls(const view_cam_t *cam)
     float dx = wall_geo[i].centre[0] - cam->pos[0];
     float dy = wall_geo[i].centre[1] - cam->pos[1];
     float dz = wall_geo[i].centre[2] - cam->pos[2];
-    float limit = AW_RANGE + wall_geo[i].radius;
+    bool death = map_wall(i)->kind == VOLUME_VOID;
+    float limit = (death ? DEATH_RANGE : AW_RANGE) + wall_geo[i].radius;
     float distance_sq = dx * dx + dy * dy + dz * dz;
     /* Reject the common far case without a square root. */
     if (distance_sq > limit * limit)
@@ -569,6 +571,18 @@ void airwall_frame(bool menu_open)
       };
       uint8_t color = colors[wall->kind];
       const __typeof__(wall_geo[0]) *geo = &wall_geo[i];
+      if (wall->kind == VOLUME_VOID && n + 2 < MAX_DOTS) {
+        float centre[3], sx, sy;
+        view_point(&cam, geo->centre, centre);
+        if (centre[2] > NEAR_PLANE) {
+          view_screen(&cam, centre, &sx, &sy);
+          if (sx > .01f && sx < .99f && sy > .01f && sy < .99f) {
+            float x = sx * REF_WIDTH, y = sy * REF_HEIGHT;
+            add_rect(dots[next], &n, x - 5, y, x + 5, y, color);
+            add_rect(dots[next], &n, x, y - 5, x, y + 5, color);
+          }
+        }
+      }
       for (int p = geo->first_point; p < geo->first_point + geo->n_points; p++)
         view_point(&cam, points[p], camera_points[p]);
       for (int e = geo->first_edge; n < MAX_DOTS && e < geo->first_edge + geo->n_edges; e++)
@@ -598,4 +612,31 @@ void airwall_summary(char *buf, int len)
   snprintf(buf, len, TF("barriers %d   load %d   death %d"),
            counts[VOLUME_BLOCKER] + counts[VOLUME_OTHER_WALL],
            counts[VOLUME_LOADING], counts[VOLUME_VOID]);
+}
+
+void airwall_nearest_death(char *buf, int len)
+{
+  vec3f_t link;
+  int nearest = -1;
+  float best = 0;
+  if (link_drawn_pos(&link)) {
+    for (int i = 0; i < n_walls; i++) {
+      if (map_wall(i)->kind != VOLUME_VOID)
+        continue;
+      const float *p = wall_geo[i].centre;
+      float x = p[0] - link.x, y = p[1] - link.y, z = p[2] - link.z;
+      float distance = x*x + y*y + z*z;
+      if (nearest < 0 || distance < best) {
+        nearest = i;
+        best = distance;
+      }
+    }
+  }
+  if (nearest < 0) {
+    snprintf(buf, len, TF("no placed death trigger found"));
+    return;
+  }
+  const float *p = wall_geo[nearest].centre;
+  snprintf(buf, len, TF("nearest death: %.0fm  %.1f / %.1f / %.1f"),
+           (double)sqrtf(best), (double)p[0], (double)p[1], (double)p[2]);
 }
