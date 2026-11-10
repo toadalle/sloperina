@@ -98,12 +98,13 @@ uint64_t sys_tick_freq(void) { return 1000; }
 uint32_t input_held(void) { return 0; }
 uint32_t input_pressed(void) { return 0; }
 bool input_repeat(uint32_t button) { (void)button; return false; }
-bool input_block_game;
+void input_set_menu_block(bool block) { (void)block; }
 bool input_combo(uint32_t mask) { (void)mask; return false; }
 void input_suppress_until_release(uint32_t mask) { (void)mask; }
-bool pause_menu_acquire(void) { return true; }
-void pause_menu_release(void) {}
-bool pause_menu_owned(void) { return false; }
+static bool test_pause_owned;
+bool pause_menu_acquire(void) { return test_pause_owned = true; }
+void pause_menu_release(void) { test_pause_owned = false; }
+bool pause_menu_owned(void) { return test_pause_owned; }
 void input_sticks(int32_t *a, int32_t *b, int32_t *c, int32_t *d) { *a = *b = *c = *d = 0; }
 const char *gd_get_str(int field) { (void)field; return "test"; }
 void airwall_link_text(char *buf, int len) { snprintf(buf, len, "outside"); }
@@ -238,9 +239,9 @@ static void test_settings(void)
   settings_load();
   assert(levitate_speed == 0); /* invalid negative speed is ignored */
   snprintf(settings, sizeof(settings), "levitate_speed=4\nmenu_pause_world=1\n");
-  menu_pause_world = false;
+  menu_pause_world = true;
   settings_load();
-  assert(levitate_speed == 4 && !menu_pause_world && levitate_reset_speed);
+  assert(levitate_speed == 4 && menu_pause_world && levitate_reset_speed);
   snprintf(settings, sizeof(settings), "practice_menu_pause=0\nlevitate_reset_speed=0\n");
   settings_load();
   assert(!menu_pause_world && !levitate_reset_speed);
@@ -317,6 +318,36 @@ static void test_hud(const char *image)
   s = gfx_published();
   assert(!s || !s->panel[1].rows);
   puts("PASS: real HUD label/value rendering and individual/global visibility");
+}
+
+static void test_menu_freeze(void)
+{
+  menu_t root = {0};
+  menu_init(&root, "freeze test", 1);
+  menu_add_return(&root);
+  menu_set_pause_world(true);
+  menu_open(&root);
+  uint32_t token = gfx_freeze_request;
+  assert(token && !test_pause_owned);
+  gfx_freeze_ready = token;
+  menu_draw();
+  assert(test_pause_owned);
+  gfx_freeze_failed = token;
+  menu_draw();
+  assert(!test_pause_owned && !gfx_freeze_request);
+  menu_draw();
+  assert(!gfx_freeze_request); /* fallback remains live for this session */
+  menu_close();
+
+  menu_open(&root);
+  assert(gfx_freeze_request != token && !test_pause_owned);
+  gfx_freeze_ready = gfx_freeze_request;
+  menu_draw();
+  assert(test_pause_owned);
+  menu_set_pause_world(false);
+  assert(!test_pause_owned && !gfx_freeze_request);
+  menu_close();
+  puts("PASS: menu waits for its backdrop, releases on failure or live mode, and recaptures on reopen");
 }
 
 static void test_menu_filler(const char *image)
@@ -428,6 +459,7 @@ int main(int argc, char **argv)
   test_settings();
   test_hud(argc > 1 ? argv[1] : NULL);
   test_menu_filler(argc > 2 ? argv[2] : NULL);
+  test_menu_freeze();
   test_reset_lock();
   return 0;
 }

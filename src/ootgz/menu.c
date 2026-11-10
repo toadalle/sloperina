@@ -15,8 +15,10 @@ static int pool_used;
 
 menu_t *menu_current;
 static menu_t *menu_last; /* where the menu was when it closed; it reopens there */
-bool menu_pause_world;
+bool menu_pause_world = true;
 static bool menu_pause_owned;
+static uint32_t freeze_serial, freeze_token;
+static uint64_t freeze_started;
 
 void menu_init(menu_t *menu, const char *title, int cap)
 {
@@ -207,10 +209,30 @@ static void menu_update_pause(void)
     if (menu_pause_owned)
       pause_menu_release();
     menu_pause_owned = false;
+    freeze_token = 0;
+    __atomic_store_n(&gfx_freeze_request, 0, __ATOMIC_RELEASE);
     return;
   }
-  if (!menu_pause_owned)
+  if (!freeze_token) {
+    freeze_token = ++freeze_serial;
+    freeze_started = sys_tick();
+    __atomic_store_n(&gfx_freeze_request, freeze_token, __ATOMIC_RELEASE);
+  }
+  if (!__atomic_load_n(&gfx_freeze_request, __ATOMIC_ACQUIRE))
+    return; /* Fall back to live for the rest of this menu session. */
+  bool ready = __atomic_load_n(&gfx_freeze_ready, __ATOMIC_ACQUIRE) == freeze_token;
+  bool failed = __atomic_load_n(&gfx_freeze_failed, __ATOMIC_ACQUIRE) == freeze_token;
+  if (!failed && ready && !menu_pause_owned) {
     menu_pause_owned = pause_menu_acquire();
+    failed = !menu_pause_owned;
+  }
+  if (failed || (!ready && sys_tick() - freeze_started > sys_tick_freq())) {
+    if (menu_pause_owned)
+      pause_menu_release();
+    menu_pause_owned = false;
+    __atomic_store_n(&gfx_freeze_request, 0, __ATOMIC_RELEASE);
+    gfx_notice("menu freeze unavailable; running live");
+  }
 }
 
 void menu_set_pause_world(bool on)
@@ -222,7 +244,7 @@ void menu_set_pause_world(bool on)
 void menu_open(menu_t *root)
 {
   enter(menu_last ? menu_last : root);
-  input_block_game = true;
+  input_set_menu_block(true);
   menu_update_pause();
 }
 
@@ -232,10 +254,8 @@ void menu_close(void)
   /* reopen in the same submenu; from the top level, start at the root */
   menu_last = menu_current && menu_current->parent ? menu_current : 0;
   menu_current = 0;
-  /* A/B/R+Plus must not become gameplay input on the frame that closes the menu. */
-  input_suppress_until_release(input_held());
   menu_update_pause();
-  input_block_game = false;
+  input_set_menu_block(false);
   gfx_clear();
 }
 
@@ -846,6 +866,7 @@ void menu_draw(void)
   menu_t *menu = menu_current;
   if (!menu)
     return;
+  menu_update_pause();
   if (!menu->parent && menu->n_items == 9 && menu->items[0].kind == MI_SUBMENU) {
     static const char *const descriptions[8] = {
       "Position and player", "Movement and cheats",
@@ -857,7 +878,9 @@ void menu_draw(void)
     gfx_dashboard(menu->selected);
     gfx_text(2, 0, GFX_DIM, "SLOPERINAGZ");
     gfx_text(2, 2, GFX_TITLE, "PRACTICE MENU");
-    gfx_text(55, 2, menu_pause_owned ? GFX_NOTICE : GFX_TITLE, menu_pause_owned ? "PAUSED" : "LIVE");
+    bool pending = __atomic_load_n(&gfx_freeze_request, __ATOMIC_ACQUIRE) != 0;
+    gfx_text(53, 2, menu_pause_owned ? GFX_NOTICE : GFX_TITLE,
+             menu_pause_owned ? "PAUSED" : pending ? "FREEZING" : "LIVE");
     for (int i = 0; i < 8; i++) {
       int col = GFX_CARD_COL + 2 + (i & 1) * GFX_CARD_PITCH_X;
       int row = GFX_CARD_ROW + 1 + (i / 2) * GFX_CARD_PITCH_Y;

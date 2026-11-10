@@ -20,7 +20,7 @@ def main():
     if Path(args.cc).is_absolute():
         env["PATH"] = str(Path(args.cc).parent) + os.pathsep + env.get("PATH", "")
     commands = []
-    for test in ("levitate", "cct"):
+    for test in ("levitate", "cct", "menu_input"):
         exe = out / (test + (".exe" if os.name == "nt" else ""))
         commands += [
             [args.cc, "-std=gnu11", "-O2", "-Wall", "-Wextra", "-Werror",

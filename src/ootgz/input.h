@@ -31,8 +31,10 @@ void     input_sticks(int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry);
 /* Hide currently-held buttons from the game until each is released. */
 void     input_suppress_until_release(uint32_t mask);
 
-/* While true, the game sees no buttons or sticks. */
-extern bool input_block_game;
+/* While blocked, the game sees no buttons or sticks. On close, retain the
+ * suppression of held buttons and sticks until they return to neutral. */
+void input_set_menu_block(bool block);
+bool input_menu_releasing(void); /* game thread: mod gameplay shortcuts stay suppressed too */
 /* Buttons the game never sees (e.g. L while levitate is on). */
 extern uint32_t input_hide_from_game;
 enum { INPUT_HIDE_LEFT_STICK = 1u << 0, INPUT_HIDE_RIGHT_STICK = 1u << 1 };

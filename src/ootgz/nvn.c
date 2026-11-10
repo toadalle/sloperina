@@ -1520,24 +1520,95 @@ static void record_readback(nvn_texture_t *tex, const panel_draw_t *draw)
   }
 }
 
+/* Keep one GPU-only copy of the visible game image, before any mod overlays.
+ * Present must continue so the practice menu can redraw on top of it. */
+#define FREEZE_BYTES_MAX (48u * 1024 * 1024)
+static nvn_obj_t freeze_pool;
+static size_t freeze_capacity;
+static nvn_queue_t *freeze_queue;
+static nvn_region_t freeze_region;
+static uint32_t captured_token;
+static int capture_slot;
+static bool capture_complete;
+
+static void freeze_fail(uint32_t token)
+{
+  if (token)
+    __atomic_store_n(&gfx_freeze_failed, token, __ATOMIC_RELEASE);
+}
+
+static bool freeze_prepare(uint32_t token, nvn_queue_t *queue, nvn_rect_t area)
+{
+  if (!token || __atomic_load_n(&gfx_freeze_failed, __ATOMIC_ACQUIRE) == token)
+    return false;
+  nvn_region_t region = { area.x, area.y, 0, area.w, area.h, 1 };
+  if (captured_token == token) {
+    if (queue != freeze_queue || !same_region(&region, &freeze_region)) {
+      freeze_fail(token);
+      return false;
+    }
+    if (!capture_complete) {
+      if (!slot_finished(capture_slot)) {
+        freeze_fail(token);
+        return false;
+      }
+      capture_complete = true;
+      __atomic_store_n(&gfx_freeze_ready, token, __ATOMIC_RELEASE);
+    }
+    return true;
+  }
+
+  size_t needed = (size_t)region.w * region.h * bytes_per_pixel;
+  if (!needed || needed > FREEZE_BYTES_MAX) {
+    freeze_fail(token);
+    return false;
+  }
+  if (!freeze_capacity) {
+    size_t size = round_page(needed);
+    void *mem = aligned_alloc(PAGE_SIZE, size);
+    if (!mem || !make_pool(&freeze_pool, mem, size, POOL_CPU_UNCACHED | POOL_GPU_UNCACHED)) {
+      if (mem)
+        free(mem);
+      freeze_fail(token);
+      return false;
+    }
+    freeze_capacity = size;
+  }
+  if (needed > freeze_capacity || (freeze_queue && freeze_queue != queue && !wait_gpu_idle())) {
+    freeze_fail(token);
+    return false;
+  }
+  freeze_queue = queue;
+  freeze_region = region;
+  return true;
+}
+
 static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
 {
+  uint32_t token = __atomic_load_n(&gfx_freeze_request, __ATOMIC_ACQUIRE);
   const gfx_screen_t *screen = gfx_published();
   int n_dots, n_hp;
   const aw_dot_t *dots = airwall_published(&n_dots);
   const aw_dot_t *hp = enemyhp_published(&n_hp);
   int pause_icon = gfx_pause_icon;
-  if ((!screen && !n_dots && !n_hp && !pause_icon) || overlay_state == OV_FAILED)
+  if (overlay_state == OV_FAILED) {
+    freeze_fail(token);
+    return;
+  }
+  if (!screen && !n_dots && !n_hp && !pause_icon && !token)
     return;
   if (index < 0 || index >= swapchain_texture_count) {
     static bool warned;
     if (!warned)
       log_printf("present of texture %d, but %d swapchain textures seen", index, swapchain_texture_count);
     warned = true;
+    freeze_fail(token);
     return;
   }
-  if (overlay_state == OV_NONE && !overlay_init())
+  if (overlay_state == OV_NONE && !overlay_init()) {
+    freeze_fail(token);
     return;
+  }
   nvn_texture_t *tex = swapchain_textures[index];
   int tw = fn.tex_width(tex);
   int th = fn.tex_height(tex);
@@ -1545,6 +1616,7 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
     if (!warned_format)
       log_printf("swapchain format changed to %d; not drawing", fn.tex_format(tex));
     warned_format = true;
+    freeze_fail(token);
     return;
   }
   frame_t frame;
@@ -1559,8 +1631,10 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
   int fit = (menu_space * SC_ONE / frame.scale - FONT_H) / CELL_H;
   gfx_menu_rows = fit < MIN_MENU_ROWS ? MIN_MENU_ROWS : fit > GFX_ROWS ? GFX_ROWS : fit;
 
+  bool freeze = freeze_prepare(token, queue, frame.area);
+  bool capture = freeze && captured_token != token;
   frame.opacity = gfx_opacity;
-  frame.see_through = frame.opacity < 100 && is_rgba8(swapchain_format) && see_through_state != ST_FAILED;
+  frame.see_through = !freeze && frame.opacity < 100 && is_rgba8(swapchain_format) && see_through_state != ST_FAILED;
   if (frame.see_through && see_through_state == ST_NONE && !see_through_init(menu_space))
     frame.see_through = false;
   /* panels with no background are drawn as rectangles (draw_clear_rects): no read-back for them */
@@ -1636,13 +1710,24 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
     draw->scale = scale;
     n++;
   }
-  if (!n && !n_dots && !n_hp && !pause_icon)
+  if (!n && !n_dots && !n_hp && !pause_icon && !freeze)
     return;
   __asm__ volatile("dsb sy" ::: "memory"); /* pixels reach memory before the GPU copies them */
 
   fn.cmd_add_command(&cmd_buffer, &command_pool, frame.slot * CMD_SIZE, CMD_SIZE);
   fn.cmd_add_control(&cmd_buffer, control_mem + frame.slot * CTRL_SIZE, CTRL_SIZE);
   fn.cmd_begin(&cmd_buffer);
+  if (freeze) {
+    nvn_addr_t address = fn.pool_address(&freeze_pool);
+    if (capture) {
+      fn.cmd_copy_to_buffer(&cmd_buffer, tex, 0, &freeze_region, address, 0);
+      captured_token = token;
+      capture_slot = frame.slot;
+      capture_complete = false;
+    } else {
+      fn.cmd_copy_to_texture(&cmd_buffer, address, tex, 0, &freeze_region, 0);
+    }
+  }
   if (n_dots)
     draw_rects(dots, n_dots, airwall_colours, AW_NCOLORS, tex, frame.area, th, frame.scale);
   if (n_hp)

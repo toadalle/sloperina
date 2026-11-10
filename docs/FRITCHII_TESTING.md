@@ -7,14 +7,16 @@ primarily for OoT 1.1.1. The controls, dashboard, and text capture are also
 available on 1.0.0 where the corresponding fields can be read.
 
 1. **Menu and HUD.** On a map with Link and visible animated actors, open with
-   R + Plus. Expect a centered card dashboard with a LIVE label. Close with
-   R + Plus, or use B from the dashboard. Check Link and nearby actors before
-   and after opening. Plus alone should still open the stock pause screen.
-   Try D-pad and left-stick navigation and check that the prior selection
-   returns on reopen. Native pause is opt-in and still has the renderer
-   limitations documented in FINDINGS §9.1. The old automatically written
-   `menu_pause_world` value is ignored so upgrades start live. New choices
-   persist under `practice_menu_pause`.
+   R + Plus. Expect a centered card dashboard and a static game backdrop
+   with Link, actors, and the stock HUD visible. The header should move from
+   FREEZING to PAUSED. Turn off Settings > Freeze game while open and check
+   that animations advance behind the menu. Navigate using D-pad and left
+   stick, then close with B or R + Plus while holding a stick off center.
+   The held stick should stay suppressed until centered. Plus alone should
+   still open the stock pause screen. Test opening from a bumper frame-advance
+   hold and verify that closing returns to the hold. If backdrop capture or
+   native pause is unavailable, the dashboard stays LIVE and reports the
+   fallback. The freeze choice persists under `practice_menu_pause`.
 2. **Flight presets.** Start hover with L3. At low and high presets, compare
    horizontal travel and the distance covered by holding X or B for the same
    time. Y/A step the preset, R + R3 sets it to 6, and X+B holds altitude.

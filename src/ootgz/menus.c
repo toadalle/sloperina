@@ -2231,10 +2231,10 @@ static void build_settings(void)
                                          get_opacity, set_opacity, 0);
   if (opacity)
     opacity->hint = "Applies to watches and submenus. The dashboard is opaque";
-  menu_item_t *pause_world = menu_add_check(&m_settings, "pause game while open", get_menu_pause_world,
+  menu_item_t *pause_world = menu_add_check(&m_settings, "freeze game while open", get_menu_pause_world,
                                              set_menu_pause_world, 0);
   if (pause_world) {
-    pause_world->hint = "Off by default. Native pause can hide Link and other objects";
+    pause_world->hint = "Capture the game picture and pause simulation. Off keeps the world live";
     pause_world->log_label = "menu world pause";
   }
   menu_end_group(&m_settings);

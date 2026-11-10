@@ -107,6 +107,8 @@ void gfx_input_scale(int percent);  /* ... at this % of the menu's text size */
 extern volatile int gfx_custom_x, gfx_custom_y;
 /* gz's pause display at the top left: 0 none, 1 paused (two bars), 2 advancing a frame (bar + play) */
 extern volatile int gfx_pause_icon;
+/* Game-thread capture request and render-thread acknowledgments, matched by token. */
+extern uint32_t gfx_freeze_request, gfx_freeze_ready, gfx_freeze_failed;
 extern volatile uint32_t gfx_presents; /* frames the game has presented (nvn.c) */
 void gfx_frame(void);            /* publish; once per frame after everything has drawn */
 

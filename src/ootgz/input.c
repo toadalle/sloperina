@@ -42,12 +42,25 @@ static uint32_t buttons_fired;    /* pressed, or repeating this frame */
 static int32_t stick_axes[4];     /* lx, ly, rx, ry */
 static int repeat_countdown;
 static uint32_t suppress_until_release;
-bool input_block_game;
+static uint32_t suppress_sticks_until_neutral;
+static bool input_block_game;
+static bool menu_releasing;
+static int64_t menu_sample_cutoff[3]; /* latest No. 1 FullKey/JoyDual and Handheld sample */
+static int64_t latest_sample[3];
+
+enum { MENU_NEUTRAL = 6000 };
+#define LEFT_DIRS (BTN_LS_LEFT | BTN_LS_UP | BTN_LS_RIGHT | BTN_LS_DOWN)
+#define RIGHT_DIRS (BTN_RS_LEFT | BTN_RS_UP | BTN_RS_RIGHT | BTN_RS_DOWN)
+
+static bool stick_neutral(int32_t x, int32_t y)
+{
+  return x > -MENU_NEUTRAL && x < MENU_NEUTRAL && y > -MENU_NEUTRAL && y < MENU_NEUTRAL;
+}
 uint32_t input_hide_from_game;
 uint32_t input_hide_sticks_from_game;
 
 /* Add one controller's state (one style of one NpadIdType) to this frame's input. */
-static void read_npad(void (*get_states)(int *, void *, int, const uint32_t *), uint32_t npad_id)
+static void read_npad(void (*get_states)(int *, void *, int, const uint32_t *), uint32_t npad_id, int style)
 {
   uint64_t buf[NPAD_STATE_BUF / 8] = { 0 };
   int state_count = 0;
@@ -57,6 +70,7 @@ static void read_npad(void (*get_states)(int *, void *, int, const uint32_t *), 
   npad_state_t *state = (npad_state_t *)buf;
   if (!(state->attributes & NPAD_ATTR_CONNECTED))
     return;
+  latest_sample[style] = state->sampling_number;
   buttons_held |= (uint32_t)state->buttons;
   if (state->lx || state->ly) {
     stick_axes[0] = state->lx;
@@ -73,11 +87,18 @@ void input_update(void)
   uint32_t previously_held = buttons_held;
   buttons_held = 0;
   stick_axes[0] = stick_axes[1] = stick_axes[2] = stick_axes[3] = 0;
-  read_npad(hid_detail_fullkey, NPAD_NO1);
-  read_npad(hid_detail_joydual, NPAD_NO1);
-  read_npad(hid_detail_handheld, NPAD_HANDHELD);
+  read_npad(hid_detail_fullkey, NPAD_NO1, 0);
+  read_npad(hid_detail_handheld, NPAD_HANDHELD, 1);
+  read_npad(hid_detail_joydual, NPAD_NO1, 2);
   buttons_pressed = buttons_held & ~previously_held;
-  suppress_until_release &= buttons_held;
+  __atomic_fetch_and(&suppress_until_release, buttons_held, __ATOMIC_RELAXED);
+  uint32_t moved = 0;
+  if (!stick_neutral(stick_axes[0], stick_axes[1]))
+    moved |= INPUT_HIDE_LEFT_STICK;
+  if (!stick_neutral(stick_axes[2], stick_axes[3]))
+    moved |= INPUT_HIDE_RIGHT_STICK;
+  uint32_t sticks = __atomic_fetch_and(&suppress_sticks_until_neutral, moved, __ATOMIC_RELAXED) & moved;
+  menu_releasing = menu_releasing && (sticks || __atomic_load_n(&suppress_until_release, __ATOMIC_RELAXED));
 
   buttons_fired = buttons_pressed;
   if (buttons_pressed) {
@@ -99,8 +120,23 @@ uint32_t input_pressed(void) { return buttons_pressed; }
 
 void input_suppress_until_release(uint32_t mask)
 {
-  suppress_until_release |= mask & buttons_held;
+  __atomic_fetch_or(&suppress_until_release, mask & buttons_held, __ATOMIC_RELAXED);
 }
+
+void input_set_menu_block(bool block)
+{
+  if (!block) {
+    menu_releasing = true;
+    input_suppress_until_release(buttons_held);
+    __atomic_store_n(&suppress_sticks_until_neutral, INPUT_HIDE_LEFT_STICK | INPUT_HIDE_RIGHT_STICK,
+                     __ATOMIC_RELAXED);
+    for (unsigned i = 0; i < 3; i++)
+      __atomic_store_n(&menu_sample_cutoff[i], latest_sample[i], __ATOMIC_RELAXED);
+  }
+  __atomic_store_n(&input_block_game, block, __ATOMIC_RELEASE);
+}
+
+bool input_menu_releasing(void) { return menu_releasing; }
 
 bool input_combo(uint32_t mask)
 {
@@ -147,18 +183,25 @@ int32_t input_force_stick[4];
 
 /* Edit the states the game just read: blank them while the menu is open, otherwise add frame
  * advance's buffered input and take out the buttons the game mustn't see. */
-static void filter_game_states(void *states, int count)
+static void filter_game_states(void *states, int count, int style, uint32_t id)
 {
-  bool need_filter = input_block_game || input_hide_from_game || input_hide_sticks_from_game ||
-                     input_force_active || suppress_until_release;
+  bool block = __atomic_load_n(&input_block_game, __ATOMIC_ACQUIRE);
+  uint32_t hidden_buttons = input_hide_from_game | __atomic_load_n(&suppress_until_release, __ATOMIC_RELAXED);
+  uint32_t hidden_sticks = input_hide_sticks_from_game |
+                           __atomic_load_n(&suppress_sticks_until_neutral, __ATOMIC_RELAXED);
+  int64_t cutoff = 0;
+  if (style < 3 && id == (style == 1 ? NPAD_HANDHELD : NPAD_NO1))
+    cutoff = __atomic_load_n(&menu_sample_cutoff[style], __ATOMIC_RELAXED);
+  if (hidden_sticks & INPUT_HIDE_LEFT_STICK)
+    hidden_buttons |= LEFT_DIRS;
+  if (hidden_sticks & INPUT_HIDE_RIGHT_STICK)
+    hidden_buttons |= RIGHT_DIRS;
   for (int i = 0; i < count; i++) {
     npad_state_t *state = (npad_state_t *)((char *)states + i * NPAD_STATE_SIZE);
     /* This runs immediately after the game's HID read, before our end-of-frame hook.
      * Hide the activation chord here so the stock Plus pause cannot win the race. */
     bool menu_combo = (state->buttons & PRACTICE_MENU_COMBO) == PRACTICE_MENU_COMBO;
-    if (!need_filter && !menu_combo)
-      continue;
-    if (input_block_game) {
+    if (block || (cutoff && state->sampling_number <= cutoff)) {
       state->buttons = 0;
       state->lx = state->ly = state->rx = state->ry = 0;
       continue;
@@ -174,11 +217,10 @@ static void filter_game_states(void *states, int count)
         state->ry = input_force_stick[3];
       }
     }
-    state->buttons &= ~(uint64_t)(input_hide_from_game | suppress_until_release |
-                                  (menu_combo ? PRACTICE_MENU_COMBO : 0));
-    if (input_hide_sticks_from_game & INPUT_HIDE_LEFT_STICK)
+    state->buttons &= ~(uint64_t)(hidden_buttons | (menu_combo ? PRACTICE_MENU_COMBO : 0));
+    if (hidden_sticks & INPUT_HIDE_LEFT_STICK)
       state->lx = state->ly = 0;
-    if (input_hide_sticks_from_game & INPUT_HIDE_RIGHT_STICK)
+    if (hidden_sticks & INPUT_HIDE_RIGHT_STICK)
       state->rx = state->ry = 0;
   }
 }
@@ -189,7 +231,7 @@ static void filter_game_states(void *states, int count)
   {                                                                 \
     int result = hid_public_##n(out, count, id);                    \
     int returned = result > 0 && result <= count ? result : 0;      \
-    filter_game_states(out, returned);                              \
+    filter_game_states(out, returned, n, *id);                              \
     return result;                                                  \
   }
 WRAP(0) WRAP(1) WRAP(2) WRAP(3) WRAP(4)

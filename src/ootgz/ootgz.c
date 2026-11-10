@@ -72,6 +72,7 @@ int frame_advance_button; /* 0 L, 1 R */
 #define FA_POLL_NS (16 * 1000 * 1000)
 
 static bool fa_paused;
+static bool fa_resume_hold_after_menu;
 static bool fa_button_down;     /* the button went down and hasn't been let go yet */
 static bool fa_not_a_tap;       /* something else was pressed while it was down */
 static uint64_t fa_button_down_at;
@@ -179,7 +180,7 @@ static int32_t buffered_stick_axes[4]; /* lx, ly, rx, ry */
 
 static void fa_buffer_input(void)
 {
-  if (menu_current) /* what's pressed for the menu isn't for the game */
+  if (menu_current || input_menu_releasing()) /* menu input is never buffered for gameplay */
     return;
   uint32_t held = input_held();
   uint32_t button = fa_button_bit();
@@ -246,7 +247,14 @@ static void fa_hold_game(void)
       gfx_notice("frame advance: running");
       break;
     }
-    menu_controls();
+    if (menu_controls() && menu_current) {
+      /* The hard hold stops all presents. Let the practice menu capture a
+       * backdrop, then return to the bumper hold when the menu closes. */
+      fa_resume_hold_after_menu = true;
+      fa_paused = false;
+      gfx_pause_icon = 0;
+      break;
+    }
     fa_event_t event = fa_read_button();
     if (event == FA_RUN) {
       fa_paused = false;
@@ -259,11 +267,7 @@ static void fa_hold_game(void)
       break;
     }
     fa_buffer_input();
-    if (menu_current) {
-      watches_sync();
-      menu_draw();
-    }
-    watches_frame(menu_current != 0);
+    watches_frame(input_menu_releasing());
     gfx_frame();
     settings_frame(menu_current != 0);
     settings_log_frame();
@@ -279,6 +283,7 @@ static void fa_hold_game(void)
 static void fa_frame(void)
 {
   if (!frame_advance) {
+    fa_resume_hold_after_menu = false;
     fa_paused = false;
     fa_button_down = false;
     gfx_pause_icon = 0;
@@ -288,6 +293,13 @@ static void fa_frame(void)
   input_hide_from_game |= fa_button_bit();
   if (!fa_paused)
     input_force_active = false;
+  if (fa_resume_hold_after_menu && !menu_current) {
+    fa_resume_hold_after_menu = false;
+    fa_read_button(); /* preserve the close input guard */
+    fa_paused = true;
+    gfx_pause_icon = pause_display ? 1 : 0;
+    return;
+  }
   if (!fa_paused && fa_read_button() == FA_TAP) {
     fa_paused = true;
     gfx_notice(frame_advance_button ? "frame advance: R a frame, R + L3 to run"
@@ -330,9 +342,10 @@ static void frame(void)
   airwall_frame(menu_current != 0);
   enemyhp_frame();
   menus_research_frame();
-  watches_frame(menu_current != 0);
-  levitate_frame(menu_current != 0);
-  position_frame(menu_current != 0);
+  bool menu_owns_input = menu_current || input_menu_releasing();
+  watches_frame(menu_owns_input);
+  levitate_frame(menu_owns_input);
+  position_frame(menu_owns_input);
   warp_frame();
   gfx_frame();
 

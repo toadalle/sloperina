@@ -39,6 +39,7 @@ volatile int gfx_menu_scale;
 volatile int gfx_custom_x = -1, gfx_custom_y = -1;
 volatile int gfx_pause_icon;
 volatile uint32_t gfx_presents;
+uint32_t gfx_freeze_request, gfx_freeze_ready, gfx_freeze_failed;
 
 /* Write text into a panel from (col, row), clipped to the grid. */
 static void put_text(gfx_panel_t *panel, int col, int row, gfx_style_t style, const char *text)
