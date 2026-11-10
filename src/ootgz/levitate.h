@@ -18,7 +18,7 @@ extern bool levitate_through_walls;
 extern int levitate_speed;        /* X/B units/s at preset 6; legacy 0 uses 4 */
 extern int levitate_move_speed;   /* horizontal units/s and vertical speed multiplier */
 
-void levitate_frame(bool menu_open);
+void levitate_frame(bool menu_open, bool native_ui);
 const char *levitate_state(void); /* for watches/menus */
 
 /* Link's physics record (where his position really lives), found and kept here; save / load position

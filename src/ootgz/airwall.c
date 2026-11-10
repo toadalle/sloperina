@@ -22,17 +22,18 @@ float cosf(float x);
 float sqrtf(float x);
 
 bool airwalls_shown, airwalls_all;
-bool loading_zones_shown, void_zones_shown, hitboxes_shown;
+bool loading_zones_shown, void_zones_shown;
 
 #define AW_RANGE 60.0f
 #define MAX_WALLS 512
 #define MAX_POINTS 8192
 #define MAX_EDGES 16384
-#define MAX_DOTS 3000
-#define MAX_RECTS_PER_EDGE 64
+#define MAX_DOTS 720
+#define MAX_VISIBLE_VOLUMES 20
+#define MAX_RECTS_PER_EDGE 18
 #define REF_WIDTH 1920    /* the picture is worked out in pixels of a 1920x1080 one */
 #define REF_HEIGHT 1080
-#define DOT_SPACING 6.0f  /* reference pixels between dots */
+#define DOT_SPACING 12.0f  /* reference pixels between dots */
 #define LINE_WIDTH 2.0f   /* reference pixels: a line's thickness, one staircase step at most */
 #define STRAIGHT 0.344f   /* tan 19 degrees: up to this slope a staircase takes fewer clears */
 #define NEAR_PLANE 0.05f
@@ -40,7 +41,7 @@ bool loading_zones_shown, void_zones_shown, hitboxes_shown;
 #define FACE_UPRIGHT 0.7f /* a face normal with more height than this points up (or down) */
 
 #define SHAPE_BOX 0        /* any other shape type is a cylinder */
-#define CYLINDER_SEGMENTS 16
+#define CYLINDER_SEGMENTS 12
 #define CYLINDER_SIDE_EVERY 4 /* a side line at every 4th segment: four in all */
 #define TWO_PI 6.2831853f
 
@@ -51,11 +52,12 @@ static char current_map_name[64];
 static struct {
   float R[9]; /* rotation, row-major */
   float centre[3], radius;
-  uint16_t first_edge, n_edges;
+  uint16_t first_point, n_points, first_edge, n_edges;
 } wall_geo[MAX_WALLS];
 static int n_walls;
 static float points[MAX_POINTS][3];
 static uint16_t edges[MAX_EDGES][2];
+static float camera_points[MAX_POINTS][3];
 static int n_points, n_edges;
 
 static const airwall_t *map_wall(int index)
@@ -74,7 +76,6 @@ static bool wall_shown(const airwall_t *wall)
     case VOLUME_OTHER_WALL: return airwalls_shown && airwalls_all;
     case VOLUME_LOADING: return loading_zones_shown;
     case VOLUME_VOID: return void_zones_shown;
-    case VOLUME_HITBOX: return hitboxes_shown;
     default: return false;
   }
 }
@@ -188,7 +189,7 @@ static void build_map_geometry(void)
     __typeof__(wall_geo[0]) *geo = &wall_geo[n_walls++];
     rotation_matrix(wall->r, geo->R);
     geo->first_edge = (uint16_t)n_edges;
-    int first_point = n_points;
+    geo->first_point = (uint16_t)n_points;
     for (int k = 0; k < wall->n_shapes; k++) {
       const airshape_t *shape = &data_airshapes[wall->first_shape + k];
       if (shape->type == SHAPE_BOX)
@@ -197,7 +198,8 @@ static void build_map_geometry(void)
         add_cylinder(wall, geo->R, shape);
     }
     geo->n_edges = (uint16_t)(n_edges - geo->first_edge);
-    bounding_sphere(wall, first_point, geo->centre, &geo->radius);
+    geo->n_points = (uint16_t)(n_points - geo->first_point);
+    bounding_sphere(wall, geo->first_point, geo->centre, &geo->radius);
   }
   log_printf("collision: %s: %d volumes, %d edges", current_map_name, n_walls, n_edges);
 }
@@ -440,12 +442,12 @@ static void add_line(aw_dot_t *out, int *n, float x0, float y0, float x1, float 
   }
 }
 
-/* The edge a-b (world points), projected, clipped and added to out[*n...]. */
+/* The edge a-b (camera space), clipped and projected into out[*n...]. */
 static void add_edge_dots(aw_dot_t *out, int *n, const view_cam_t *cam, const float a[3], const float b[3], uint8_t color)
 {
   float va[3], vb[3];
-  view_point(cam, a, va);
-  view_point(cam, b, vb);
+  memcpy(va, a, sizeof(va));
+  memcpy(vb, b, sizeof(vb));
   if (!clip_near(va, vb))
     return;
   float x0, y0, x1, y1;
@@ -485,8 +487,8 @@ static bool game_is_paused(void)
 
 /* --- frame ---------------------------------------------------------------------------------------- */
 
-static int16_t near_order[MAX_WALLS];  /* walls within AW_RANGE of the camera, nearest first */
-static float near_distance[MAX_WALLS];
+static int16_t near_order[MAX_VISIBLE_VOLUMES];  /* walls within AW_RANGE of the camera, nearest first */
+static float near_distance[MAX_VISIBLE_VOLUMES];
 
 /* A wall's bounding sphere is wholly outside the camera frustum. This is conservative:
  * intersecting spheres stay in, so no visible edge is dropped before the exact line clipping. */
@@ -526,7 +528,13 @@ static int sort_near_walls(const view_cam_t *cam)
     if (sphere_outside_view(cam, wall_geo[i].centre, wall_geo[i].radius, side_norm, top_norm))
       continue;
     float distance = sqrtf(distance_sq) - wall_geo[i].radius;
-    int j = count++;
+    /* Reserve the nearest portion of the list for trigger volumes so
+     * dense barriers cannot hide an entrance or a death volume. */
+    if (map_wall(i)->kind == VOLUME_LOADING || map_wall(i)->kind == VOLUME_VOID)
+      distance -= AW_RANGE;
+    if (count == MAX_VISIBLE_VOLUMES && distance >= near_distance[count - 1])
+      continue;
+    int j = count < MAX_VISIBLE_VOLUMES ? count++ : count - 1;
     while (j > 0 && near_distance[j - 1] > distance) {
       near_order[j] = near_order[j - 1];
       near_distance[j] = near_distance[j - 1];
@@ -544,7 +552,7 @@ void airwall_frame(bool menu_open)
   check_link();
   int next = published == 0 ? 1 : 0;
   int n = 0;
-  bool enabled = airwalls_shown || loading_zones_shown || void_zones_shown || hitboxes_shown;
+  bool enabled = airwalls_shown || loading_zones_shown || void_zones_shown;
   bool draw = enabled && n_walls && !menu_open && !game_is_paused();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
@@ -557,11 +565,14 @@ void airwall_frame(bool menu_open)
       const airwall_t *wall = map_wall(i);
       static const uint8_t colors[] = {
         [VOLUME_BLOCKER] = AW_BLOCKS, [VOLUME_OTHER_WALL] = AW_OTHER,
-        [VOLUME_LOADING] = AW_LOADING, [VOLUME_VOID] = AW_VOID, [VOLUME_HITBOX] = AW_HITBOX,
+        [VOLUME_LOADING] = AW_LOADING, [VOLUME_VOID] = AW_VOID,
       };
-      uint8_t color = i == link_wall ? AW_INSIDE : colors[wall->kind];
-      for (int e = wall_geo[i].first_edge; n < MAX_DOTS && e < wall_geo[i].first_edge + wall_geo[i].n_edges; e++)
-        add_edge_dots(dots[next], &n, &cam, points[edges[e][0]], points[edges[e][1]], color);
+      uint8_t color = colors[wall->kind];
+      const __typeof__(wall_geo[0]) *geo = &wall_geo[i];
+      for (int p = geo->first_point; p < geo->first_point + geo->n_points; p++)
+        view_point(&cam, points[p], camera_points[p]);
+      for (int e = geo->first_edge; n < MAX_DOTS && e < geo->first_edge + geo->n_edges; e++)
+        add_edge_dots(dots[next], &n, &cam, camera_points[edges[e][0]], camera_points[edges[e][1]], color);
       if (n == MAX_DOTS) {
         n = start;
         break;
@@ -581,10 +592,10 @@ const aw_dot_t *airwall_published(int *n)
 
 void airwall_summary(char *buf, int len)
 {
-  int counts[VOLUME_HITBOX + 1] = {0};
+  int counts[VOLUME_VOID + 1] = {0};
   for (int i = 0; i < n_walls; i++)
     counts[map_wall(i)->kind]++;
-  snprintf(buf, len, TF("air %d   load %d   void %d   boxes %d"),
+  snprintf(buf, len, TF("barriers %d   load %d   death %d"),
            counts[VOLUME_BLOCKER] + counts[VOLUME_OTHER_WALL],
-           counts[VOLUME_LOADING], counts[VOLUME_VOID], counts[VOLUME_HITBOX]);
+           counts[VOLUME_LOADING], counts[VOLUME_VOID]);
 }

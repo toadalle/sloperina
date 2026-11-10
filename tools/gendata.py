@@ -413,7 +413,7 @@ def write_airwalls(out, airwall_maps, scene_maps):
     out.write("const airshape_t data_airshapes[] = {")
     walls, maps = [], []
     n_shapes = 0
-    scene_kind = {"loading": 2, "void": 3, "hitbox": 4}
+    scene_kind = {"loading": 2, "void": 3}
     scene = []
     for source, index in ((airwall_maps, maps), (scene_maps, scene)):
         for name in sorted(source):

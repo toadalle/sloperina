@@ -82,6 +82,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .ui_mgr_ptr = 0x4C7E098,
     .vt_dpad = 0x4BE1068,
     .vt_hud = 0x4BEB710,
+    .vt_message_dialog = 0x4BE9678,
     .vt_map_screen = 0x4BE8300,
     .event_mgr_ptr = 0x4C7E090,
     .event_req_ctor = 0xD79F10,

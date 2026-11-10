@@ -4,6 +4,8 @@
 #define POUCH_H
 
 #include <stdbool.h>
+
+bool game_message_open(void);
 #include <stdint.h>
 
 /* Single calls; only valid on the game's thread (inside a job or the frame hook). */

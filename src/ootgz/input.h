@@ -18,7 +18,9 @@ enum {
 
 /* Dedicated practice-menu activation chord. The HID wrapper uses the same constant
  * so Plus can be hidden from the game on the exact read that sees the chord. */
-#define PRACTICE_MENU_COMBO (BTN_R | BTN_PLUS)
+#define PRACTICE_MENU_COMBO (BTN_R | BTN_A)
+#define MINI_HUD_COMBO (BTN_L | BTN_A)
+#define PRACTICE_CHORD_EXCLUDED (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT)
 
 void     input_update(void);       /* once per frame, from the frame hook */
 uint32_t input_held(void);
@@ -34,6 +36,8 @@ void     input_suppress_until_release(uint32_t mask);
 /* While blocked, the game sees no buttons or sticks. On close, retain the
  * suppression of held buttons and sticks until they return to neutral. */
 void input_set_menu_block(bool block);
+void input_set_native_ui(bool owned);
+bool input_action_chord(uint32_t combo); /* an A press with only the intended bumper */
 bool input_menu_releasing(void); /* game thread: mod gameplay shortcuts stay suppressed too */
 /* Buttons the game never sees (e.g. L while levitate is on). */
 extern uint32_t input_hide_from_game;

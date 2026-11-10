@@ -124,6 +124,19 @@ static uintptr_t find_screen(bool (*pick)(uintptr_t screen, uintptr_t arg), uint
 
 static bool pick_vtable(uintptr_t screen, uintptr_t vtable) { return sys_ptr(screen) == vtable; }
 
+bool game_message_open(void)
+{
+  if (!z64hd_game->vt_message_dialog)
+    return false;
+  uintptr_t screen = find_screen(pick_vtable, MAIN(z64hd_game->vt_message_dialog));
+  if (!screen || !sys_mapped(screen + 0x1A5, 2, SYS_PERM_R))
+    return false;
+  /* QueryUIMessageDialogGetState -> IsOpen (main+0x444C70):
+   * positive signed lifecycle byte and no pending close/open transition. */
+  const volatile int8_t *state = (const volatile int8_t *)(screen + 0x1A5);
+  return state[0] > 0 && state[1] == 0;
+}
+
 /* the PlayerStatus (HUD) screen: the one holding the D-pad widget */
 static bool pick_hud(uintptr_t screen, uintptr_t unused)
 {

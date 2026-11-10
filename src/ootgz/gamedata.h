@@ -60,4 +60,6 @@ bool        gd_set_str(uint32_t hash, const char *s);
  * Either out pointer may be 0. */
 bool        gd_game_paused(bool *is_pause, int32_t *pause_requests);
 
+bool gd_game_pre_pause(void);
+
 #endif

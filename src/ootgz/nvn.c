@@ -398,10 +398,6 @@ static bool overlay_init(void)
  * the first time it's used, in separate pieces (the game's heap had no room for one big block). */
 
 static enum { ST_NONE, ST_READY, ST_FAILED } see_through_state;
-/* the menu panel's second buffer (opaque, it has only one) */
-static nvn_obj_t menu_second_pool;
-static uint8_t *menu_second_mem;
-static size_t menu_second_size;
 /* what was under each panel, read back from the picture, per slot */
 static nvn_obj_t readback_pool[GFX_PANELS][SLOTS];
 static uint8_t *readback_mem[GFX_PANELS][SLOTS];
@@ -418,8 +414,6 @@ static int text_mask_cols[GFX_PANELS], text_mask_rows[GFX_PANELS];
 
 static void see_through_free(void)
 {
-  free(menu_second_mem);
-  menu_second_mem = 0;
   for (int p = 0; p < GFX_PANELS; p++) {
     free(text_mask[p]);
     text_mask[p] = 0;
@@ -430,39 +424,24 @@ static void see_through_free(void)
   }
 }
 
-/* menu_max_height: the tallest the menu panel can be on screen (under the D-pad) */
-static bool see_through_init(int menu_max_height)
+/* Only the optional input monitor uses a see-through backdrop. */
+static bool see_through_init(void)
 {
-  int max_w[GFX_PANELS], max_h[GFX_PANELS];
-  for (int p = 0; p < GFX_PANELS; p++) {
-    max_w[p] = PANEL_W(panel_max_cols[p], alloc_scale * SC_ONE);
-    max_h[p] = PANEL_H(panel_max_rows[p], alloc_scale * SC_ONE);
-  }
-  if (menu_max_height > 0 && menu_max_height < max_h[PANEL_MENU])
-    max_h[PANEL_MENU] = menu_max_height;
+  int p = GFX_PANEL_INPUT;
+  int max_w = PANEL_W(panel_max_cols[p], alloc_scale * SC_ONE);
   size_t total = 0;
-  menu_second_size = round_page((size_t)max_w[PANEL_MENU] * max_h[PANEL_MENU] * RGBA8_BYTES);
-  menu_second_mem = aligned_alloc(PAGE_SIZE, menu_second_size);
-  total += menu_second_size;
-  bool ok = menu_second_mem &&
-            make_pool(&menu_second_pool, menu_second_mem, menu_second_size, POOL_CPU_UNCACHED | POOL_GPU_UNCACHED);
-  for (int p = 0; p < GFX_PANELS && ok; p++) {
-    /* one row per font-pixel row: at most the panel's font height, whatever the scale */
-    if (p == GFX_PANEL_INPUT)
-      readback_size[p] = round_page(panel_area(p, alloc_scale * SC_ONE) / alloc_scale * RGBA8_BYTES + max_w[p] * 8);
-    else
-      readback_size[p] = round_page((size_t)max_w[p] * (MASK_H(panel_max_rows[p]) + 1) * RGBA8_BYTES);
-    text_mask_size[p] = (size_t)MASK_W(panel_max_cols[p]) * MASK_H(panel_max_rows[p]);
-    text_mask[p] = aligned_alloc(MASK_ALIGN, text_mask_size[p]);
-    ok = text_mask[p] != 0;
-    for (int b = 0; b < SLOTS && ok; b++) {
-      readback_mem[p][b] = aligned_alloc(PAGE_SIZE, readback_size[p]);
-      ok = readback_mem[p][b] != 0 && make_pool(&readback_pool[p][b], readback_mem[p][b], readback_size[p],
-                                                POOL_CPU_CACHED | POOL_GPU_UNCACHED);
-      total += readback_size[p];
-    }
-    total += text_mask_size[p];
+  bool ok;
+  readback_size[p] = round_page(panel_area(p, alloc_scale * SC_ONE) / alloc_scale * RGBA8_BYTES + max_w * 8);
+  text_mask_size[p] = (size_t)MASK_W(panel_max_cols[p]) * MASK_H(panel_max_rows[p]);
+  text_mask[p] = aligned_alloc(MASK_ALIGN, text_mask_size[p]);
+  ok = text_mask[p] != 0;
+  for (int b = 0; b < SLOTS && ok; b++) {
+    readback_mem[p][b] = aligned_alloc(PAGE_SIZE, readback_size[p]);
+    ok = readback_mem[p][b] != 0 && make_pool(&readback_pool[p][b], readback_mem[p][b], readback_size[p],
+                                              POOL_CPU_CACHED | POOL_GPU_UNCACHED);
+    total += readback_size[p];
   }
+  total += text_mask_size[p];
   if (!ok) {
     log_printf("see-through background off: not enough memory (needs %u KiB)", (unsigned)(total / 1024));
     gfx_notice("see-through background: the game has no memory free for it");
@@ -475,17 +454,13 @@ static bool see_through_init(int menu_max_height)
   return true;
 }
 
-/* Where buffer b of panel p lives: CPU pointer and GPU address. The menu's buffer 1 only exists
- * for the see-through path, which uses a buffer per slot. */
 static uint8_t *panel_buffer_ptr(int p, int b)
 {
-  return p == PANEL_MENU && b == 1 ? menu_second_mem : pixel_mem + pixel_offset[p][b];
+  return pixel_mem + pixel_offset[p][b];
 }
 
 static nvn_addr_t panel_buffer_addr(int p, int b)
 {
-  if (p == PANEL_MENU && b == 1)
-    return fn.pool_address(&menu_second_pool);
   return fn.pool_address(&pixel_pool) + pixel_offset[p][b];
 }
 
@@ -924,6 +899,14 @@ static void rasterise(const gfx_panel_t *panel, uint8_t *dst, int scale, int w, 
         int fx = x * SC_ONE / scale, fy = y * SC_ONE / scale;
         pixel = panel->dashboard ? dashboard_background(panel, fx, fy) : menu_row_background(panel, fx, fy);
       }
+      if (!pixel && panel->mini_hud) {
+        int fx = x * SC_ONE / scale;
+        int fy = y * SC_ONE / scale - TEXT_TOP;
+        if (fx < 2 || y == 0)
+          pixel = PAL_CARD_BORDER;
+        else if (fy >= 0 && fy / CELL_H < panel->rows && (fy / CELL_H & 1))
+          pixel = PAL_CARD;
+      }
       uint64_t colour = encoded[pixel];
       if (bytes_per_pixel == 8) {
         memcpy(row_buffer + x * 8, &colour, 8);
@@ -1198,12 +1181,10 @@ static void compose_see_through(int p, uint8_t *dst, const uint8_t *under, int u
 #define MIN_DOT_SIZE 2
 
 static const float airwall_colours[AW_NCOLORS][4] = {
-  [AW_BLOCKS] = { 0.23f, 0.84f, 1.0f, 1.0f }, /* cyan: stops Link */
-  [AW_INSIDE] = { 1.0f, 0.28f, 0.28f, 1.0f }, /* red: Link is inside it */
-  [AW_OTHER] = { 0.60f, 0.55f, 1.0f, 1.0f },  /* violet: other air walls */
-  [AW_LOADING] = { 0.30f, 1.0f, 0.51f, 1.0f },
-  [AW_VOID] = { 1.0f, 0.59f, 0.24f, 1.0f },
-  [AW_HITBOX] = { 1.0f, 0.46f, 0.83f, 1.0f },
+  [AW_BLOCKS] = { 0.26f, 0.60f, 1.0f, 1.0f }, /* blue: stops Link */
+  [AW_OTHER] = { 0.52f, 0.72f, 0.94f, 1.0f },  /* lighter blue: other barriers */
+  [AW_LOADING] = { 1.0f, 0.86f, 0.23f, 1.0f },
+  [AW_VOID] = { 1.0f, 0.26f, 0.22f, 1.0f },
 };
 
 /* enemy health (enemyhp.c) */
@@ -1457,28 +1438,8 @@ static bool plan_see_through_panel(panel_draw_t *draw, int p, const gfx_panel_t 
   int w = placed.w;
   int h = placed.h;
   int rb_rows = font_rows_in(h, scale);
-  if (p == PANEL_MENU && (size_t)w * h * RGBA8_BYTES > menu_second_size) { /* taller than the menu can be */
-    h = (int)(menu_second_size / ((size_t)w * RGBA8_BYTES));
-    draw->region.h = h;
-    rb_rows = font_rows_in(h, scale);
-  }
-  /* The menu reads back the most it can cover, not just its panel: when it changes size (another
-   * menu), what's under the new size is already there, rather than 2 frames of no see-through. */
   nvn_region_t rb_region = draw->region;
   int under_width = w;
-  if (p == PANEL_MENU) {
-    int max_w = PANEL_W(panel_max_cols[PANEL_MENU], scale);
-    int max_h = frame->area.h - placed.y - frame->margin;
-    if (max_w > frame->area.w - placed.x - frame->margin)
-      max_w = frame->area.w - placed.x - frame->margin;
-    int max_rows = font_rows_in(max_h, scale);
-    if (max_w >= w && max_h >= h && (size_t)max_w * max_rows * RGBA8_BYTES <= readback_size[PANEL_MENU]) {
-      rb_region.w = max_w;
-      rb_region.h = max_h;
-      under_width = max_w;
-      rb_rows = max_rows;
-    }
-  }
   if ((size_t)under_width * rb_rows * RGBA8_BYTES > readback_size[p])
     return false;
   if (text_mask_hash[p] != panel->hash || text_mask_cols[p] != cols || text_mask_rows[p] != rows)
@@ -1494,7 +1455,7 @@ static bool plan_see_through_panel(panel_draw_t *draw, int p, const gfx_panel_t 
                       no_background ? panel->alpha : 0, panel->yoff);
   /* nothing to blend with yet (2 frames: just opened, or a new size): read what's there and show
    * it then, rather than a solid background for 2 frames (a flash) */
-  if (!under && (no_background || p == PANEL_MENU))
+  if (!under && no_background)
     draw->copy = false;
   drawn_hash[p][slot] = 0; /* the opaque path redraws when it's next used */
   readback_region[p][slot] = rb_region;
@@ -1536,9 +1497,11 @@ static void record_readback(nvn_texture_t *tex, const panel_draw_t *draw)
 
 /* Keep one GPU-only copy of the visible game image, before any mod overlays.
  * Present must continue so the practice menu can redraw on top of it. */
-#define FREEZE_BYTES_MAX (48u * 1024 * 1024)
-static nvn_obj_t freeze_pool;
-static size_t freeze_capacity;
+#define FREEZE_STRIPS 4
+#define FREEZE_BYTES_MAX (32u * 1024 * 1024)
+static nvn_obj_t freeze_pool[FREEZE_STRIPS];
+static size_t freeze_capacity[FREEZE_STRIPS];
+static bool freeze_storage_failed;
 static nvn_queue_t *freeze_queue;
 static nvn_region_t freeze_region;
 static uint32_t captured_token;
@@ -1573,23 +1536,35 @@ static bool freeze_prepare(uint32_t token, nvn_queue_t *queue, nvn_rect_t area)
   }
 
   size_t needed = (size_t)region.w * region.h * bytes_per_pixel;
-  if (!needed || needed > FREEZE_BYTES_MAX) {
+  if (!needed || region.h < FREEZE_STRIPS || needed > FREEZE_BYTES_MAX) {
     freeze_fail(token, "capture dimensions exceed limit");
     return false;
   }
-  if (!freeze_capacity) {
-    size_t size = round_page(needed);
-    void *mem = aligned_alloc(PAGE_SIZE, size);
-    if (!mem || !make_pool(&freeze_pool, mem, size, POOL_CPU_UNCACHED | POOL_GPU_UNCACHED)) {
-      if (mem)
-        free(mem);
-      freeze_fail(token, "capture pool allocation failed");
+  if (freeze_storage_failed) {
+    freeze_fail(token, "capture storage unavailable");
+    return false;
+  }
+  size_t strip_size = round_page((size_t)region.w * ((region.h + FREEZE_STRIPS - 1) / FREEZE_STRIPS) *
+                                 bytes_per_pixel);
+  for (unsigned i = 0; i < FREEZE_STRIPS; i++) {
+    if (!freeze_capacity[i]) {
+      void *mem = aligned_alloc(PAGE_SIZE, strip_size);
+      if (!mem || !make_pool(&freeze_pool[i], mem, strip_size, POOL_CPU_UNCACHED | POOL_GPU_UNCACHED)) {
+        if (mem)
+          free(mem);
+        freeze_storage_failed = true;
+        freeze_fail(token, mem ? "NVN rejected capture strip storage" : "capture strip allocation failed");
+        return false;
+      }
+      freeze_capacity[i] = strip_size;
+    }
+    if (strip_size > freeze_capacity[i]) {
+      freeze_fail(token, "capture region outgrew its storage");
       return false;
     }
-    freeze_capacity = size;
   }
-  if (needed > freeze_capacity || (freeze_queue && freeze_queue != queue && !wait_gpu_idle())) {
-    freeze_fail(token, "capture pool cannot be reused");
+  if (freeze_queue && freeze_queue != queue && !wait_gpu_idle()) {
+    freeze_fail(token, "capture queue is busy");
     return false;
   }
   freeze_queue = queue;
@@ -1657,8 +1632,10 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
   bool freeze = freeze_prepare(token, queue, frame.area);
   bool capture = freeze && captured_token != token;
   frame.opacity = gfx_opacity;
-  frame.see_through = !freeze && frame.opacity < 100 && is_rgba8(swapchain_format) && see_through_state != ST_FAILED;
-  if (frame.see_through && see_through_state == ST_NONE && !see_through_init(menu_space))
+  const gfx_panel_t *input_panel = screen ? &screen->panel[GFX_PANEL_INPUT] : 0;
+  frame.see_through = !freeze && input_panel && input_panel->rows && !input_panel->clear &&
+                      frame.opacity < 100 && is_rgba8(swapchain_format) && see_through_state != ST_FAILED;
+  if (frame.see_through && see_through_state == ST_NONE && !see_through_init())
     frame.see_through = false;
   /* panels with no background are drawn as rectangles (draw_clear_rects): no read-back for them */
   int hud_bottom_right = -1; /* the watches' top edge when they're at the bottom right: the log goes above */
@@ -1725,7 +1702,7 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
       n++;
       continue;
     }
-    if (frame.see_through && p != PANEL_MENU) {
+    if (frame.see_through && p == GFX_PANEL_INPUT) {
       nvn_rect_t placed = { x, y, w, h };
       if (!plan_see_through_panel(draw, p, panel, cols, rows, placed, scale, &frame))
         continue;
@@ -1743,14 +1720,22 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
   fn.cmd_add_control(&cmd_buffer, control_mem + frame.slot * CTRL_SIZE, CTRL_SIZE);
   fn.cmd_begin(&cmd_buffer);
   if (freeze) {
-    nvn_addr_t address = fn.pool_address(&freeze_pool);
+    for (int i = 0; i < FREEZE_STRIPS; i++) {
+      int y0 = freeze_region.h * i / FREEZE_STRIPS;
+      int y1 = freeze_region.h * (i + 1) / FREEZE_STRIPS;
+      nvn_region_t strip = freeze_region;
+      strip.y += y0;
+      strip.h = y1 - y0;
+      nvn_addr_t address = fn.pool_address(&freeze_pool[i]);
+      if (capture)
+        fn.cmd_copy_to_buffer(&cmd_buffer, tex, 0, &strip, address, 0);
+      else
+        fn.cmd_copy_to_texture(&cmd_buffer, address, tex, 0, &strip, 0);
+    }
     if (capture) {
-      fn.cmd_copy_to_buffer(&cmd_buffer, tex, 0, &freeze_region, address, 0);
       captured_token = token;
       capture_slot = frame.slot;
       capture_complete = false;
-    } else {
-      fn.cmd_copy_to_texture(&cmd_buffer, address, tex, 0, &freeze_region, 0);
     }
   }
   if (n_dots)

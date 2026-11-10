@@ -25,7 +25,7 @@ static const struct z64hd_build test_build; /* no build: the version-specific pa
 const struct z64hd_build *z64hd_game = &test_build;
 bool enemy_hp_shown;
 bool cheats[CHEAT_COUNT], frame_advance, pause_display, warp_arrival_cutscenes;
-bool levitate_enabled, levitate_through_walls, loading_zones_shown, void_zones_shown, hitboxes_shown, airwalls_shown, airwalls_all;
+bool levitate_enabled, levitate_through_walls, loading_zones_shown, void_zones_shown, airwalls_shown, airwalls_all;
 bool levitate_reset_speed = true;
 int frame_advance_button, levitate_speed = 5, levitate_move_speed = 5;
 
@@ -97,6 +97,7 @@ uint32_t frame_counter(void) { return 0; }
 uint64_t sys_tick(void) { return 1; }
 uint64_t sys_tick_freq(void) { return 1000; }
 uint32_t input_held(void) { return 0; }
+bool input_action_chord(uint32_t combo) { (void)combo; return false; }
 static uint32_t menu_pressed;
 uint32_t input_pressed(void) { return menu_pressed; }
 bool input_repeat(uint32_t button) { (void)button; return false; }

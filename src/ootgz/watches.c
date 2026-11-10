@@ -831,9 +831,12 @@ static void command_input(void)
     gfx_notice("lag counter reset");
   } else if (input_combo(BTN_R | BTN_A | BTN_DRIGHT)) {
     gfx_notice(js_height_reset() ? "JS Height reset" : "JS Height: Link not found");
-  } else if (input_combo(BTN_R | BTN_DRIGHT) && !(held & (BTN_A | BTN_B))) {
+  } else if (input_action_chord(MINI_HUD_COMBO) ||
+             (input_combo(BTN_R | BTN_DRIGHT) && !(held & (BTN_A | BTN_B)))) {
+    if (input_action_chord(MINI_HUD_COMBO))
+      input_suppress_until_release(BTN_A);
     watches_shown = !watches_shown;
-    gfx_notice(watches_shown ? "watches shown" : "watches hidden");
+    gfx_notice(watches_shown ? "mini-HUD shown" : "mini-HUD hidden");
   }
 }
 
@@ -878,7 +881,7 @@ void watches_frame(bool menu_open)
    * world-space "speed" watch above. Do not change saved watch IDs or order. */
   if (show_flight_speed) {
     snprintf(value, sizeof(value), "%d", levitate_move_speed);
-    gfx_hud((gfx_corner_t)watches_corner, 0, row, GFX_TITLE, "flight speed ");
+    gfx_hud((gfx_corner_t)watches_corner, 0, row, GFX_DIM, "flight speed ");
     gfx_hud((gfx_corner_t)watches_corner, 13, row, GFX_NORMAL, value);
   }
 }

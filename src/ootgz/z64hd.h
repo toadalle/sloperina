@@ -40,6 +40,7 @@ struct z64hd_build {
   uint32_t ui_mgr_ptr;
   uint32_t vt_dpad;
   uint32_t vt_hud;
+  uint32_t vt_message_dialog; /* zero until verified for this build */
   uint32_t vt_map_screen;
   uint32_t event_mgr_ptr;
   uint32_t event_req_ctor;

@@ -259,6 +259,8 @@ void gfx_hud_at(int x_permille, int y_permille)
 void gfx_hud(gfx_corner_t corner, int col, int row, gfx_style_t style, const char *s)
 {
   hud_panel.corner = corner;
+  hud_panel.mini_hud = true;
+  hud_panel.scale_pct = 85;
   hud_panel.yoff = 1; /* text in the middle of the panel (nvn.c TEXT_TOP) */
   put_text(&hud_panel, col, row, style, s);
 }
@@ -351,7 +353,7 @@ static void measure_panel(gfx_panel_t *panel)
                   (uint32_t)panel->fullscreen << 9; /* geometry/background changes */
   hash = hash_mix(hash, (uint32_t)panel->pad << 9 ^ (uint32_t)panel->clicks << 10 ^
                           (uint32_t)(uint8_t)panel->yoff << 12 ^ (uint32_t)panel->scale_pct << 16);
-  hash = hash_mix(hash, panel->dashboard);
+  hash = hash_mix(hash, panel->dashboard | ((uint32_t)panel->mini_hud << 8));
   hash = hash_mix(hash, panel->menu_rows);
   hash = hash_mix(hash, panel->menu_focus);
   for (int i = 0; i < 4; i++) /* the sticks are drawn from these */

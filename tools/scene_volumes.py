@@ -3,7 +3,7 @@
 Run with OOTMENU_NUP set, then run gendata.py. Only derived geometry leaves
 this tool. Classify loading/abyss areas by game logic reference. Prefer baked
 geometry and use the verified Area box convention for default-box placements.
-Export baked static object boxes separately.
+Export player triggers only.
 """
 from collections import Counter, defaultdict
 import json
@@ -45,7 +45,7 @@ def logic_areas(paths):
 def tile_boxes(data, areas):
     _, sections = phive.phive_sections(data)
     hdr, _ = sections[0]
-    n_actors, n_info, n_materials = struct.unpack_from("<3I", data, hdr + phive.BPHSC_COUNTS_AT + 16)
+    n_actors, n_info = struct.unpack_from("<2I", data, hdr + phive.BPHSC_COUNTS_AT + 16)
 
     def records(section, fmt, count):
         return [struct.unpack_from(fmt, data, sections[section][0] + i * struct.calcsize(fmt))
@@ -53,10 +53,7 @@ def tile_boxes(data, areas):
 
     actor_hashes = {r[2] for r in records(1, "<IIQI12x", n_actors)}
     info = records(4, "<I4BHHII", n_info)
-    materials = records(5, "<IIQ", n_materials)
-    masks = records(6, "<QQ", n_materials)
     pending = {h: area for h, area in areas.items() if h in actor_hashes}
-    seen_layers = set()
     for offset, size in sections[11:]:
         if not size or not phive.is_tagfile(data, offset):
             continue
@@ -67,29 +64,20 @@ def tile_boxes(data, areas):
         instances = phive.compound_instances(data, root)
         if not instances or instances[0]["shapeTag"] >= len(info):
             continue
-        layer_key = tuple(info[instances[0]["shapeTag"]][1:3])
-        extra = layer_key in seen_layers and not layer_key[0]
-        seen_layers.add(layer_key)
-        if extra:
+        if not info[instances[0]["shapeTag"]][1]:
             continue
         for inst in instances:
             if tf.objects.get(inst["shape"]) != "hknpBoxShape" or inst["shapeTag"] >= len(info):
                 continue
-            _, sensor, layer, _, _, _, _, first, count = info[inst["shapeTag"]]
-            if sensor and phive.name_of(phive.LAYERS_SENSOR, layer) == "StaticGeneralArea":
-                matching = [(h, name) for h, (name, a) in pending.items() if area_matches(inst, a)]
-                if len(matching) != 1:
-                    continue
-                actor_hash, category = matching[0]
-                del pending[actor_hash]
-            elif not sensor and phive.name_of(phive.LAYERS_ENTITY, layer) in ("Object", "GroundObject"):
-                indices = range(first, min(first + count, len(materials)))
-                if not any(materials[i][0] != phive.MATERIALS.index("AirWall") and
-                           masks[i][0] & phive.PLAYER_LAYER_BIT for i in indices):
-                    continue
-                actor_hash, category = None, "hitbox"
-            else:
+            _, sensor, layer, *_ = info[inst["shapeTag"]]
+            if not sensor or phive.name_of(phive.LAYERS_SENSOR, layer) != "StaticGeneralArea":
                 continue
+            matching = [(h, name) for h, (name, a) in pending.items()
+                        if a.get("Dynamic", {}).get("RigidBodyShapeType", 1) == 1 and area_matches(inst, a)]
+            if len(matching) != 1:
+                continue
+            actor_hash, category = matching[0]
+            del pending[actor_hash]
             box = box_geometry(data, inst, category)
             if box:
                 yield actor_hash, box
@@ -151,26 +139,33 @@ def main():
         seen = set()
         for tile in sorted(tiles[name]):
             for actor_hash, box in tile_boxes(gamefiles.read(tile), areas):
-                if actor_hash is not None:
-                    if actor_hash in seen:
-                        continue
-                    seen.add(actor_hash)
+                if actor_hash in seen:
+                    continue
+                seen.add(actor_hash)
                 volumes.append(box)
                 matched[box["kind"]] += 1
         for actor_hash, (kind, actor) in areas.items():
-            if actor_hash in seen or actor.get("Dynamic", {}).get("RigidBodyShapeType", 1) != 1:
+            shape_type = actor.get("Dynamic", {}).get("RigidBodyShapeType", 1)
+            if actor_hash in seen or shape_type not in (1, 3):
                 continue
             scale = airwalls._scale_of(actor)
             if len(scale) != 3 or not all(math.isfinite(v) and v > 0 for v in scale):
                 continue
             # The default Area box is two units across and sits on its local
             # origin, as seen in the matched baked boxes (e.g. Dodongo Cavern).
+            if shape_type == 1:
+                shape = {"type": "box", "center": [0, 1, 0], "half": [1, 1, 1]}
+            else:
+                # 1.1.1 Area initializer main+0x45F1BC: radius=Scale.X,
+                # axis from the placement origin to +2*Scale.Y.
+                shape = {"type": "cylinder", "a": [0, 0, 0], "b": [0, 2 * scale[1], 0], "radius": scale[0]}
+                scale = [1, 1, 1]
             volumes.append({"kind": kind, "t": actor["Translate"], "r": actor.get("Rotate") or [0, 0, 0],
-                            "s": scale, "shapes": [{"type": "box", "center": [0, 1, 0], "half": [1, 1, 1]}]})
+                            "s": scale, "shapes": [shape]})
             matched[kind] += 1
         if volumes:
-            maps[name] = sorted(volumes, key=lambda box: box["kind"] == "hitbox")
-    OUT.write_text(json.dumps({"source": "1.1.1 baked Phive box volumes", "maps": maps},
+            maps[name] = volumes
+    OUT.write_text(json.dumps({"source": "1.1.1 Phive and Area player trigger volumes", "maps": maps},
                               separators=(",", ":")) + "\n", encoding="utf-8")
     print(f"{len(maps)} maps, {dict(matched)}. Logic areas found: {dict(discovered)}.")
 

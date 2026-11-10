@@ -164,7 +164,8 @@ static int scan_region;   /* index into heap_regions */
 static uintptr_t scan_pos; /* the next address to look at */
 static int n_tested;
 static uintptr_t scan_origin;
-static uintptr_t last_found; /* where the record was last time: the next search starts there */
+static uintptr_t last_found, last_found_actor; /* hint, always test again after invalidation */
+static bool scan_initialized;
 static size_t bytes_scanned;
 
 typedef struct { uintptr_t addr; double error; } candidate_t;
@@ -245,17 +246,23 @@ static void search_start(bool quiet)
   if (!link || !link_drawn_pos(&search_pos))
     return;
   record_actor = link;
-  n_heap_regions = 0;
-  sys_regions(SYS_PERM_R | SYS_PERM_W, add_heap_region, 0);
-  /* records are made again in each area, near where they were (game.py POS_NEAR) */
-  scan_origin = last_found ? last_found : link;
-  sort_regions();
-  scan_region = 0;
-  scan_pos = n_heap_regions ? heap_regions[0].lo : 0;
+  scan_initialized = false;
   bytes_scanned = 0;
   n_tested = 0;
   quiet_search = quiet;
   search_state = SEARCH_FINDING;
+}
+
+static void search_regions(void)
+{
+  scan_initialized = true;
+  n_heap_regions = 0;
+  sys_regions(SYS_PERM_R | SYS_PERM_W, add_heap_region, 0);
+  /* records are made again in each area, near where they were (game.py POS_NEAR) */
+  scan_origin = last_found_actor == record_actor && last_found ? last_found : record_actor;
+  sort_regions();
+  scan_region = 0;
+  scan_pos = n_heap_regions ? heap_regions[0].lo : 0;
   log_printf("levitate: scanning %d heap regions for Link's record, nearest %#lx first", n_heap_regions,
              (unsigned long)scan_origin);
 }
@@ -372,6 +379,26 @@ static bool test_start(void)
   return true;
 }
 
+static void restore_test_lift(void)
+{
+  uintptr_t addr = candidate.addr;
+  double was[3];
+  memcpy(was, saved_record, sizeof(was));
+  if (record_actor != link_actor() || !sys_mapped(addr, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W))
+    return;
+  const volatile double *pos = (const volatile double *)addr;
+  if (pos[0] == was[0] && abs_double(pos[1] - (was[1] + TEST_LIFT)) < 1e-9 && pos[2] == was[2])
+    memcpy((void *)addr, saved_record, test_wrote_motion ? sizeof(saved_record) : RECORD_POS_SIZE);
+}
+
+static void cancel_search(void)
+{
+  if (search_state == SEARCH_TESTING)
+    restore_test_lift();
+  if (search_state == SEARCH_TESTING || search_state == SEARCH_FINDING || search_state == SEARCH_FAILED)
+    search_state = SEARCH_IDLE;
+}
+
 static void test_step(void)
 {
   if (!sys_mapped(candidate.addr, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W)) {
@@ -385,6 +412,7 @@ static void test_step(void)
     record = candidate.addr;
     record_has_motion = true;
     last_found = record;
+    last_found_actor = record_actor;
     log_printf("levitate: Link's physics record is %#lx (moved him; scanned %u MiB)", (unsigned long)record,
                (unsigned)(bytes_scanned >> 20));
     search_state = SEARCH_READY;
@@ -392,12 +420,7 @@ static void test_step(void)
   }
   if (++test_frames < TEST_FRAMES)
     return;
-  /* not Link's: put it back unless the game has rewritten it */
-  uintptr_t addr = candidate.addr;
-  double was_y;
-  memcpy(&was_y, saved_record + 8, 8);
-  if (abs_double(((volatile double *)addr)[1] - (was_y + TEST_LIFT)) < 1e-9)
-    memcpy((void *)addr, saved_record, test_wrote_motion ? sizeof(saved_record) : RECORD_POS_SIZE);
+  restore_test_lift();
   if (n_tested >= MAX_TESTS_PER_SEARCH) {
     log_printf("levitate: %d matches didn't move Link", n_tested);
     search_failed();
@@ -881,13 +904,13 @@ static void handle_l3(bool menu_open)
     drop();
   } else if (!menu_open && (input_pressed() & BTN_LSTICK) && !(input_held() & (BTN_L | BTN_R))) {
     /* L/R + L3 is reserved by frame advance; avoid a hover toggle as a side effect. */
+    if (levitate_reset_speed)
+      levitate_move_speed = FLIGHT_SPEED_DEFAULT;
     if (floating) {
       drop();
       gfx_notice("levitate off");
     } else {
       floating = true;
-      if (levitate_reset_speed)
-        levitate_move_speed = FLIGHT_SPEED_DEFAULT;
       levitate_through_walls = false; /* always enter hover with normal collision */
       quiet_search = false;
       gfx_notice("levitate on");
@@ -899,9 +922,16 @@ static void handle_l3(bool menu_open)
 static bool search_running(void)
 {
   if (search_state == SEARCH_FINDING) {
+    if (!scan_initialized) {
+      if (n_tested == 0 && last_found && last_found_actor == record_actor && link_drawn_pos(&search_pos)) {
+        candidate = (candidate_t){ .addr = last_found };
+        if (test_start())
+          return true;
+      }
+      search_regions();
+    }
     if (scan_step()) {
-      if (!test_start())
-        search_state = SEARCH_IDLE;
+      test_start(); /* if it changed after scanning, advance to the next match */
     } else if (scan_region >= n_heap_regions) {
       log_printf("levitate: no match in %u MiB of heap (%d tested)", (unsigned)(bytes_scanned >> 20), n_tested);
       search_failed();
@@ -992,7 +1022,6 @@ static void abandon_record(const char *reason)
   /* Invalidate before release. Native cleanup revalidates its own owner. */
   record = 0;
   record_actor = 0;
-  last_found = 0;
   search_state = SEARCH_IDLE;
   hold_frames = 0;
   drop();
@@ -1037,6 +1066,8 @@ static void frame(bool menu_open)
   handle_l3(menu_open);
   if (!menu_open && floating) {
     uint32_t speed_buttons = input_pressed() & (BTN_Y | BTN_A);
+    if (input_held() & (BTN_L | BTN_R))
+      speed_buttons &= ~BTN_A;
     /* Both pressed at once are a no-op; other input stays fully available. */
     if (speed_buttons == BTN_Y)
       adjust_flight_speed(-1);
@@ -1063,6 +1094,9 @@ static void frame(bool menu_open)
     }
   }
 
+  if (!floating && !requested && !cheats[CHEAT_SPEED] && !cheats[CHEAT_WALLS] &&
+      (search_state == SEARCH_FINDING || search_state == SEARCH_TESTING))
+    cancel_search();
   if (search_running())
     return;
   if (search_state == SEARCH_FAILED && --retry_wait_frames <= 0)
@@ -1122,8 +1156,24 @@ static void frame(bool menu_open)
   }
 }
 
-void levitate_frame(bool menu_open)
+void levitate_frame(bool menu_open, bool native_ui)
 {
+  if (native_ui) {
+    /* Return Link and the pad to the game during dialogue/instrument input.
+     * Preserve the session and take a fresh position when play resumes. */
+    if (moving_link) {
+      bool ghost = levitate_through_walls;
+      drop();
+      floating = true;
+      levitate_through_walls = ghost;
+      landing_actor = 0;
+    }
+    if (phasing || walking_through)
+      walls_stop();
+    cancel_search();
+    input_hide_from_game = input_hide_sticks_from_game = 0;
+    return;
+  }
   frame(menu_open);
   if (!floating && !phasing)
     cct_noclip_end();

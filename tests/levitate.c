@@ -115,7 +115,7 @@ static void test_release(void)
     memset(expected + 0x44, 0, 4);
     if (disable) levitate_enabled = false;
     else pressed = BTN_LSTICK;
-    levitate_frame(false);
+    levitate_frame(false, false);
     assert(!floating && !moving_link);
     assert(velocity_resets == 1 && landing_actor == link_actor());
     assert(!memcmp(physics, expected, sizeof(expected))); /* no position or horizontal writes */
@@ -125,16 +125,16 @@ static void test_release(void)
     physics[1] -= 0.1; /* next game frame applies gravity */
     sync_drawn();
     memcpy(expected, physics, sizeof(expected));
-    levitate_frame(false);
+    levitate_frame(false, false);
     assert(!memcmp(physics, expected, sizeof(expected))); /* no continued velocity clamp */
     assert(velocity_resets == 1);
-    for (int i = 0; i < 300; i++) levitate_frame(false);
+    for (int i = 0; i < 300; i++) levitate_frame(false, false);
     assert(landing_actor == link_actor()); /* Long drops do not outlast a healing timer. */
     on_ground = true;
-    for (int i = 0; i < 6; i++) levitate_frame(false);
+    for (int i = 0; i < 6; i++) levitate_frame(false, false);
     assert(!landing_actor && velocity_resets == 1);
     int saved_resets = distance_resets;
-    levitate_frame(false);
+    levitate_frame(false, false);
     assert(distance_resets == saved_resets); /* Later ordinary falls are unchanged. */
   }
   for (int invalid = 0; invalid < 4; invalid++) {
@@ -150,7 +150,7 @@ static void test_release(void)
     unsigned char before[sizeof(physics)];
     memcpy(before, physics, sizeof(before));
     pressed = BTN_LSTICK;
-    levitate_frame(false);
+    levitate_frame(false, false);
     assert(!floating && !moving_link && !memcmp(before, physics, sizeof(before)));
   }
   puts("PASS: L3 controller reset once, long-drop landing protection, no later clamp; invalid records untouched");
@@ -170,10 +170,27 @@ static void test_idle_and_respawn(void)
 
   physics[1] -= 100; /* same actor, record and draw both moved by respawn */
   sync_drawn();
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!floating && !controller_active && !record && search_state == SEARCH_IDLE);
   assert(physics[1] < 10); /* old ghost target did not overwrite the spawn */
   puts("PASS: ghost resumes after idle, vertical speed scales, respawn releases ownership");
+}
+
+static void test_dialogue_handoff(void)
+{
+  start(true);
+  controller_active = true;
+  held = BTN_A | BTN_B;
+  pressed = BTN_A;
+  double height = physics[1];
+  levitate_frame(false, true);
+  assert(floating && levitate_through_walls && !moving_link && !controller_active);
+  assert(!input_hide_from_game && !input_hide_sticks_from_game);
+  assert(physics[1] == height && levitate_move_speed == 6);
+  held = pressed = 0;
+  levitate_frame(false, false);
+  assert(floating && moving_link && controller_active);
+  puts("PASS: dialogue owns controls, restores collision temporarily, and resumes hover");
 }
 
 static void test_reset_speed(void)
@@ -184,8 +201,11 @@ static void test_reset_speed(void)
     levitate_reset_speed = reset != 0;
     levitate_move_speed = 20;
     pressed = BTN_LSTICK;
-    levitate_frame(false);
+    levitate_frame(false, false);
     assert(floating && levitate_move_speed == (reset ? 6 : 20));
+    levitate_move_speed = 30;
+    levitate_frame(false, false); /* second L3 edge */
+    assert(!floating && levitate_move_speed == (reset ? 6 : 30));
   }
   puts("PASS: each hover resets speed when enabled and retains it when disabled");
 }
@@ -249,18 +269,18 @@ static void test_vertical_controls(void)
   floating = moving_link = false;
   held = BTN_X;
   pressed = BTN_LSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(floating && input_hide_from_game == (BTN_LSTICK | BTN_RSTICK | BTN_X | BTN_B | BTN_Y | BTN_A));
   assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
   assert((input_hide_from_game & (BTN_Y | BTN_A)) == (BTN_Y | BTN_A));
-  levitate_frame(false); /* second L3 press turns it off in the same frame */
+  levitate_frame(false, false); /* second L3 press turns it off in the same frame */
   assert(!floating && input_hide_from_game == BTN_LSTICK && input_hide_sticks_from_game == 0);
   levitate_enabled = false;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(input_hide_from_game == 0 && input_hide_sticks_from_game == 0);
   start(true);
   mapped = false;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!floating && input_hide_from_game == BTN_LSTICK);
   puts("PASS: X/B ascent/descent, hover, reversal, both/hold/menu, floor bypass and button masking");
 }
@@ -272,27 +292,27 @@ static void test_walk_wall_shortcut(void)
   cheats[CHEAT_WALLS] = false;
   held = BTN_R | BTN_RSTICK;
   pressed = BTN_RSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(cheats[CHEAT_WALLS] && !floating && !levitate_through_walls);
   held = BTN_R;
   pressed = 0;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(cheats[CHEAT_WALLS]);
   held = BTN_R | BTN_RSTICK;
   pressed = BTN_RSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!cheats[CHEAT_WALLS]);
   start(false);
   cheats[CHEAT_WALLS] = false;
   held = BTN_R | BTN_RSTICK;
   pressed = BTN_RSTICK;
-  levitate_frame(true);
+  levitate_frame(true, false);
   assert(!cheats[CHEAT_WALLS]); /* practice menu doesn't toggle */
   start(false);
   cheats[CHEAT_WALLS] = false;
   held = BTN_R | BTN_RSTICK;
   pressed = BTN_RSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(floating && levitate_move_speed == 6 && !cheats[CHEAT_WALLS]);
   puts("PASS: walking R+R3 toggles existing wall pass, hover resets speed, menu guard");
 }
@@ -301,20 +321,20 @@ static void test_transition_handoff(void)
 {
   start(true);
   held = pressed = 0;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(controller_active && floating && moving_link);
   transition_active = true;
   int before = controller_moves;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!floating && !moving_link && !controller_active);
   assert(controller_restores == 1);
   assert(controller_moves == before); /* no movement through loading state */
   held = pressed = BTN_LSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!floating); /* L3 cannot reactivate while transitioning */
   transition_active = false;
   held = pressed = BTN_LSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(floating); /* re-entry is possible after loading */
   puts("PASS: scene transition releases ghost and suppresses hover position writes/re-entry");
 }
@@ -324,35 +344,35 @@ static void test_flight_speed_buttons(void)
   start(false);
   levitate_move_speed = 6;
   held = pressed = BTN_A;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(levitate_move_speed == 8);
   assert((input_hide_from_game & (BTN_A | BTN_Y)) == (BTN_A | BTN_Y));
   pressed = 0;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(levitate_move_speed == 8); /* no repeat while held */
   held = pressed = BTN_Y;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(levitate_move_speed == 6);
   levitate_move_speed = 2;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(levitate_move_speed == 2); /* minimum */
   levitate_move_speed = 30;
   held = pressed = BTN_A;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(levitate_move_speed == 30); /* maximum */
   held = pressed = BTN_A | BTN_Y;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(levitate_move_speed == 30); /* simultaneous presses cancel */
   levitate_through_walls = true;
   held = BTN_R | BTN_RSTICK;
   pressed = BTN_RSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(levitate_move_speed == 6 && levitate_through_walls); /* R+R3 reset, no ghost toggle */
   held = pressed = BTN_RSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!levitate_through_walls && levitate_move_speed == 6); /* plain R3 toggles ghost */
   levitate_move_speed = 30;
-  levitate_frame(true);
+  levitate_frame(true, false);
   assert(levitate_move_speed == 30); /* menu A/Y does not change flight speed */
   puts("PASS: Y/A bounded flight speed, R+R3 default reset/ghost isolation, masking and menu guard");
 }
@@ -363,31 +383,31 @@ static void test_ghost_toggle(void)
   floating = moving_link = false;
   held = BTN_R | BTN_LSTICK;
   pressed = BTN_LSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!floating); /* frame-advance chord must not also toggle hover */
 
   start(false);
   floating = moving_link = false;
   held = BTN_LSTICK;
   pressed = BTN_LSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(floating && moving_link && !levitate_through_walls && !controller_active);
   assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
 
   held = BTN_RSTICK;
   pressed = BTN_RSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(floating && levitate_through_walls && controller_active);
   assert(controller_moves == 1 && velocity_stops == 1);
 
   held = 0;
   pressed = 0;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(controller_moves == 2 && velocity_stops == 2);
 
   held = BTN_RSTICK;
   pressed = BTN_RSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(floating && !levitate_through_walls && !controller_active && controller_restores == 1);
   assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
   puts("PASS: L3 hover guard, R3 ghost toggle, full velocity stop and left-stick gameplay masking");
@@ -397,30 +417,30 @@ static void test_controller_path(void)
 {
   start(true);
   held = BTN_X;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(controller_active && controller_moves == 1 && velocity_stops == 1);
   double height = physics[1];
   physics[1] += 0.5; /* Ignore leftover collision corrections in actual noclip. */
   held = 0;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(physics[1] == height);
   pressed = BTN_LSTICK;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!controller_active && controller_restores == 1 && !floating);
 
   start(true);
-  levitate_frame(false);
+  levitate_frame(false, false);
   levitate_through_walls = false;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!controller_active && controller_restores == 1);
   start(true);
   controller_available = false;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!floating && !controller_active && controller_moves == 0 && physics[1] == 100);
   start(true);
-  levitate_frame(false);
+  levitate_frame(false, false);
   mapped = false;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(!floating && !controller_active && controller_restores == 1);
   puts("PASS: controller move/restore, mode change, invalid controller and record loss");
 }
@@ -502,12 +522,12 @@ int main(void)
   drop();
   physics[1] -= 0.5;
   sync_drawn();
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(physics[1] == height - 0.5); /* stopping levitation restores normal falling */
 
   start(true);
   mapped = false;
-  levitate_frame(false);
+  levitate_frame(false, false);
   assert(search_state == SEARCH_IDLE && !floating && !moving_link && !record && physics[1] == 100);
   start(true); /* new record/scene starts from its own height, not an old floor */
   physics[1] = 20;
@@ -523,6 +543,7 @@ int main(void)
   test_flight_speed_buttons();
   test_idle_and_respawn();
   test_reset_speed();
+  test_dialogue_handoff();
   test_transition_handoff();
   test_walk_wall_shortcut();
   test_controller_path();

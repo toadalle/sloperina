@@ -882,7 +882,7 @@ void menu_draw(void)
       gfx_text(col, row, i == menu->selected ? GFX_TITLE : GFX_NORMAL, label);
       gfx_text(col + 2, row + 1, GFX_DIM, descriptions[i]);
     }
-    gfx_text(2, 24, GFX_DIM, "D-PAD  Move     A  Select     B / R + PLUS  Close");
+    gfx_text(2, 24, GFX_DIM, "D-PAD  Move     A  Select     B / R + A  Close");
     gfx_end();
     return;
   }
@@ -938,7 +938,7 @@ void menu_draw(void)
            menu_pause_owned ? "PAUSED" : "LIVE");
   for (int k = 0; k < title_rows; k++)
     gfx_text(2, k + 1, GFX_TITLE, title_lines[k]);
-  gfx_text(2, footer, GFX_DIM, "D-PAD  Move     A  Select     B  Back     R + PLUS  Close");
+  gfx_text(2, footer, GFX_DIM, "D-PAD  Move     A  Select     B  Back     R + A  Close");
   for (int row = 0; row < pinned + visible; row++) {
     int index = row < pinned ? row : menu->scroll + row - pinned;
     if (index >= menu->n_items)

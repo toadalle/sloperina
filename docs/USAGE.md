@@ -18,7 +18,7 @@ A quick guide to get you practising. For every option in every menu, see the [ma
    sloperinaGZ works with **The Legend of Zelda: Ocarina of Time (Switch 2), versions 1.0.0 and 1.1.1**.
 2. **Start the game.** For a few seconds the bottom-right corner shows sloperinaGZ's name, version and
    build date, the website, and how to open the menu. That means it's running.
-3. **Open the menu:** press **R + Plus**. Press the chord again to close it.
+3. **Open the menu:** press **R + A**. Press the chord again to close it.
 
 The menu freezes the game over a captured backdrop by default on supported
 builds. Turn off **Settings > Freeze game while open** for live inspection.
@@ -30,7 +30,8 @@ Navigate with the D-pad or left stick. **A** selects and **B** goes back.
 
 | Button | In the menu |
 |---|---|
-| **R + Plus** | Open or close the menu |
+| **R + A** | Open or close the menu |
+| **L + A** | Toggle the mini-HUD during gameplay |
 | **D-pad up / down** | Move up and down the list |
 | **D-pad left / right** | Change a value (switches, numbers), or pick a button on a row of buttons |
 | **A** | Open a menu, tick a box or activate an action |

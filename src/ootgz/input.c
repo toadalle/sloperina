@@ -44,6 +44,7 @@ static int repeat_countdown;
 static uint32_t suppress_until_release;
 static uint32_t suppress_sticks_until_neutral;
 static bool input_block_game;
+static bool native_ui_owns_input;
 static bool menu_releasing;
 static int64_t menu_sample_cutoff[3]; /* latest No. 1 FullKey/JoyDual and Handheld sample */
 static int64_t latest_sample[3];
@@ -136,6 +137,21 @@ void input_set_menu_block(bool block)
   __atomic_store_n(&input_block_game, block, __ATOMIC_RELEASE);
 }
 
+void input_set_native_ui(bool owned)
+{
+  __atomic_store_n(&native_ui_owns_input, owned, __ATOMIC_RELEASE);
+}
+
+static bool action_chord(uint64_t buttons, uint32_t combo)
+{
+  return (buttons & (BTN_L | BTN_R | BTN_A | PRACTICE_CHORD_EXCLUDED)) == combo;
+}
+
+bool input_action_chord(uint32_t combo)
+{
+  return (buttons_pressed & BTN_A) && action_chord(buttons_held, combo);
+}
+
 bool input_menu_releasing(void) { return menu_releasing; }
 
 bool input_combo(uint32_t mask)
@@ -185,6 +201,8 @@ int32_t input_force_stick[4];
  * advance's buffered input and take out the buttons the game mustn't see. */
 static void filter_game_states(void *states, int count, int style, uint32_t id)
 {
+  if (__atomic_load_n(&native_ui_owns_input, __ATOMIC_ACQUIRE))
+    return;
   bool block = __atomic_load_n(&input_block_game, __ATOMIC_ACQUIRE);
   uint32_t hidden_buttons = input_hide_from_game | __atomic_load_n(&suppress_until_release, __ATOMIC_RELAXED);
   uint32_t hidden_sticks = input_hide_sticks_from_game |
@@ -198,9 +216,10 @@ static void filter_game_states(void *states, int count, int style, uint32_t id)
     hidden_buttons |= RIGHT_DIRS;
   for (int i = 0; i < count; i++) {
     npad_state_t *state = (npad_state_t *)((char *)states + i * NPAD_STATE_SIZE);
-    /* This runs immediately after the game's HID read, before our end-of-frame hook.
-     * Hide the activation chord here so the stock Plus pause cannot win the race. */
-    bool menu_combo = (state->buttons & PRACTICE_MENU_COMBO) == PRACTICE_MENU_COMBO;
+    /* Hide both halves of a reserved chord before vanilla can start
+     * a quick-swap or action from the same sample. */
+    uint32_t shortcut = action_chord(state->buttons, PRACTICE_MENU_COMBO) ? PRACTICE_MENU_COMBO :
+                        action_chord(state->buttons, MINI_HUD_COMBO) ? MINI_HUD_COMBO : 0;
     if (block || (cutoff && state->sampling_number <= cutoff)) {
       state->buttons = 0;
       state->lx = state->ly = state->rx = state->ry = 0;
@@ -217,7 +236,7 @@ static void filter_game_states(void *states, int count, int style, uint32_t id)
         state->ry = input_force_stick[3];
       }
     }
-    state->buttons &= ~(uint64_t)(hidden_buttons | (menu_combo ? PRACTICE_MENU_COMBO : 0));
+    state->buttons &= ~(uint64_t)(hidden_buttons | shortcut);
     if (hidden_sticks & INPUT_HIDE_LEFT_STICK)
       state->lx = state->ly = 0;
     if (hidden_sticks & INPUT_HIDE_RIGHT_STICK)

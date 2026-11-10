@@ -30,7 +30,22 @@ int main(void)
   input_update();
   npad_state_t sample = raw;
   filter_game_states(&sample, 1, 0, NPAD_NO1);
-  assert(!sample.buttons && input_combo(PRACTICE_MENU_COMBO));
+  assert(!sample.buttons && input_action_chord(PRACTICE_MENU_COMBO));
+  input_set_native_ui(true);
+  input_hide_from_game = BTN_A | BTN_B | BTN_X | BTN_Y;
+  sample = raw;
+  filter_game_states(&sample, 1, 0, NPAD_NO1);
+  assert(sample.buttons == PRACTICE_MENU_COMBO); /* preserve the ocarina note */
+  sample.buttons = BTN_A | BTN_B;
+  filter_game_states(&sample, 1, 0, NPAD_NO1);
+  assert(sample.buttons == (BTN_A | BTN_B)); /* preserve dialogue controls */
+  input_set_native_ui(false);
+  input_hide_from_game = 0;
+  raw.sampling_number++;
+  raw.buttons = MINI_HUD_COMBO;
+  sample = raw;
+  filter_game_states(&sample, 1, 0, NPAD_NO1);
+  assert(!sample.buttons);
 
   input_set_menu_block(true);
   raw.sampling_number++;
@@ -59,7 +74,7 @@ int main(void)
   history[0] = raw;
   history[0].buttons = BTN_PLUS;
   history[0].lx = -20000;
-  history[1].sampling_number = 11;
+  history[1].sampling_number = 12;
   history[1].buttons = BTN_B;
   filter_game_states(history, 2, 0, NPAD_NO1);
   assert(history[0].buttons == BTN_PLUS && history[0].lx == -20000);

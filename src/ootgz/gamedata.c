@@ -289,3 +289,12 @@ bool gd_game_paused(bool *is_pause, int32_t *pause_requests)
     *pause_requests = requests;
   return pause || requests > 0;
 }
+
+bool gd_game_pre_pause(void)
+{
+  static uint32_t hash;
+  if (!hash)
+    hash = murmur3("Sequence_IsPreGamePause");
+  bool pre_pause = false;
+  return gd_get_bool(hash, &pre_pause) && pre_pause;
+}

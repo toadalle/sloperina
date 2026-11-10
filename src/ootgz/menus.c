@@ -1887,17 +1887,13 @@ static void build_scene(void)
                                         set_scene_volume, (intptr_t)&loading_zones_shown);
   menu_item_t *abyss = menu_add_check(&m_collision, "show void zones", get_scene_volume,
                                        set_scene_volume, (intptr_t)&void_zones_shown);
-  menu_item_t *hitboxes = menu_add_check(&m_collision, "show static hitboxes", get_scene_volume,
-                                          set_scene_volume, (intptr_t)&hitboxes_shown);
   if (loading)
-    loading->hint = "Green: map entrance trigger volumes";
+    loading->hint = "Yellow: map entrance trigger volumes";
   if (abyss)
-    abyss->hint = "Orange: player abyss triggers";
-  if (hitboxes)
-    hitboxes->hint = "Pink: baked object collision boxes. Combat hitboxes are separate";
-  menu_item_t *show = menu_add_check(&m_collision, "show air walls", get_air_walls_shown, set_air_walls_shown, 0);
+    abyss->hint = "Red: player death and void-out triggers";
+  menu_item_t *show = menu_add_check(&m_collision, "show invisible barriers", get_air_walls_shown, set_air_walls_shown, 0);
   if (show) {
-    show->hint = "cyan: stop Link   red: he's inside it   violet: other kinds";
+    show->hint = "Blue: invisible walls that block Link";
     show->log_label = "air walls:";
   }
   menu_item_t *all_kinds = menu_add_check(&m_collision, "include non-player air walls", get_air_walls_all, set_air_walls_all, 0);
@@ -2215,7 +2211,7 @@ static void build_settings(void)
   menu_item_t *opacity = menu_add_option(&m_settings, "background opacity", ARRAY_LEN(opacity_names), opacity_names,
                                          get_opacity, set_opacity, 0);
   if (opacity)
-    opacity->hint = "Opacity of the gameplay watch panel and input display";
+    opacity->hint = "Opacity of the input display background";
   menu_item_t *pause_world = menu_add_check(&m_settings, "freeze game while open", get_menu_pause_world,
                                              set_menu_pause_world, 0);
   if (pause_world) {
@@ -2231,7 +2227,7 @@ static void build_settings(void)
   menu_item_t *mini_hud = menu_add_check(&m_settings, "show gameplay mini-HUD", get_shown,
                                           set_shown, 0);
   if (mini_hud)
-    mini_hud->hint = "Show the Sloperina watch panel during gameplay";
+    mini_hud->hint = "Show the Sloperina watch panel during gameplay. L + A toggles it";
   menu_add_submenu(&m_settings, "about", &m_about);
 
   /* Built here because their settings are persisted; linked from functional categories below. */
@@ -2639,7 +2635,7 @@ void menus_splash(void)
   static char title[64], date[64];
   snprintf(title, sizeof(title), "sloperinaGZ - %s", BUILD_VERSION);
   snprintf(date, sizeof(date), TF("Build Date: %s"), BUILD_WHEN);
-  const char *lines[] = { title, date, "practicerom.com/oothd", 0, T("R + Plus: open the menu") };
+  const char *lines[] = { title, date, "practicerom.com/oothd", 0, T("R + A: open the menu") };
   static const uint8_t styles[] = { GFX_DIM, GFX_DIM, GFX_LOG, GFX_LOG, GFX_NORMAL };
   static const uint8_t indents[] = { 0, 0, 0, 0, 0 };
   gfx_splash(lines, styles, indents, ARRAY_LEN(lines), SPLASH_FRAMES);

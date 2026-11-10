@@ -7,24 +7,27 @@ primarily for OoT 1.1.1. The controls, dashboard, and text capture are also
 available on 1.0.0 where the corresponding fields can be read.
 
 1. **Menu and HUD.** On a map with Link and visible animated actors, open with
-   R + Plus. Expect a centered card dashboard and a static game backdrop
+   R + A. Expect a centered card dashboard and a static game backdrop
    with Link, actors, and the stock HUD visible. The header should move from
    FREEZING to PAUSED. Turn off Settings > Freeze game while open and check
    that animations advance behind the menu. Navigate using D-pad and left
-   stick, then close with B or R + Plus while holding a stick off center.
+   stick, then close with B or R + A while holding a stick off center.
    The held stick should stay suppressed until centered. Plus alone should
-   still open the stock pause screen. Test opening from a bumper frame-advance
+   still open the stock pause screen. While playing the ocarina, hold R and
+   press A. The note should play and the practice menu should stay closed.
+   While hovering, open a dialogue box and verify that A and B work normally
+   until the box closes. Hover should resume after those buttons are released. Test opening from a bumper frame-advance
    hold and verify that closing returns to the hold. If backdrop capture
    fails, native pause still runs and the log reports the capture failure.
    The game can hide actors during this fallback. If native pause itself
    is unavailable, the dashboard stays LIVE. Check Settings > Show gameplay
-   mini-HUD to hide or show the mod's watch overlay.
+   mini-HUD or use L + A to hide or show the mod's watch overlay.
 2. **Flight presets.** Start hover with L3. At low and high presets, compare
    horizontal travel and the distance covered by holding X or B for the same
    time. Y/A step the preset, R + R3 sets it to 6, and X+B holds altitude.
    The base rise speed is the X/B speed at preset 6. Change Settings →
-   Reset flight speed on hover toggle to verify that both reset and retain behavior
-   survive a restart.
+   Reset flight speed on hover toggle. Confirm that speed resets on both L3
+   edges when enabled and is retained on both edges when disabled.
 3. **Recovery.** Hover in place for several seconds in normal and ghost mode,
    then move. In ghost mode, void out, wait until gameplay is back, and press
    L3 again. Repeat around a natural scene exit, including with a record search
@@ -32,13 +35,12 @@ available on 1.0.0 where the corresponding fields can be read.
    or a large relocation. Check for ordinary collision on arrival and capture
    the log if a black screen remains or hover fails to restart.
 4. **Collision outlines.** In Scene > Collision, try the layers separately.
-   Check green loading volumes at the Dodongo's Cavern and Forest Temple
-   entrances, orange player-void volumes near cliff edges, and pink static
-   object hitboxes. Cyan and violet still mark air walls. The counts show
-   exported volumes for the current map. The overlay draws through scenery.
-   It covers box-shaped player void triggers and selected baked physical
-   boxes. Live attacks, moving actor hitboxes, and terrain meshes need
-   separate sources.
+   Check yellow loading volumes at the Dodongo's Cavern and Forest Temple
+   entrances, red player-void volumes near the Kakariko Village cliff edge,
+   and blue invisible barriers. Kakariko's player-void volumes are cylinders.
+   The overlay draws through scenery and caps each frame at 20 volumes and
+   720 rectangle commands. Dense terrain wireframe would need a separate
+   batched GPU path.
 5. **Camera and ledges.** Capture Quick Snapshot in open space, then fly through
    a wall or near a ledge. If the camera or Link gets stuck, immediately take
    another Quick Snapshot, followed by Deep Diagnostics. Include the map,

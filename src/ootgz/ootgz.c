@@ -51,11 +51,11 @@ static uint32_t frames_run;
 /* --- frame advance ---------------------------------------------------------------------------
  * With it on (settings > frame advance), a tap of its button (L or R, menu closed) pauses the game:
  * this hook, on the game's thread, holds it here, as a debugger's breakpoint would. While held, a
- * tap lets one frame through, and the button + L3 lets it run again; the menu still opens (R + Plus) and works as usual. gz's pause icon shows at the top left. The game never sees the
+ * tap lets one frame through, and the button + L3 lets it run again; the menu still opens (R + A) and works as usual. gz's pause icon shows at the top left. The game never sees the
  * button while it's on.
  * As in gz, everything else can be held or pressed meanwhile (the stick, A, Z...): the frame let
  * through reads the controller as it is, plus what was buffered while paused. Only R's shortcuts
- * (R + Plus, R + d-pad...) don't count as a tap, so they don't pause the game; L has none. */
+ * (R + A, R + d-pad...) don't count as a tap, so they don't pause the game; L has none. */
 bool frame_advance = true;
 bool pause_display = true;
 int frame_advance_button; /* 0 L, 1 R */
@@ -97,7 +97,7 @@ static uint32_t fa_button_bit(void) { return frame_advance_button ? BTN_R : BTN_
 /* What, held or pressed with the button, makes it a shortcut rather than a tap. */
 static uint32_t fa_shortcut_keys(void)
 {
-  return frame_advance_button ? (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT | BTN_PLUS) : 0;
+  return BTN_A | (frame_advance_button ? PRACTICE_CHORD_EXCLUDED : 0);
 }
 
 static fa_event_t fa_read_button(void)
@@ -158,14 +158,14 @@ static fa_event_t fa_read_button(void)
 /* Opens, closes and drives the menu. Returns true if the input was the menu's. */
 static bool menu_controls(void)
 {
-  if (!menu_current && input_combo(PRACTICE_MENU_COMBO)) {
+  if (!menu_current && input_action_chord(PRACTICE_MENU_COMBO)) {
     if (gd_game_paused(0, 0) || pause_transition_active()) {
       input_suppress_until_release(PRACTICE_MENU_COMBO);
       return true; /* Leave native pause screens and transitions to the game. */
     }
     menu_open(&menu_root);
   }
-  else if (menu_current && input_combo(PRACTICE_MENU_COMBO))
+  else if (menu_current && input_action_chord(PRACTICE_MENU_COMBO))
     menu_close(); /* the open combo toggles it */
   else if (menu_current) {
     watches_sync();
@@ -338,14 +338,19 @@ static void frame(void)
     first_frame();
   }
   frames_run++;
+  bool native_ui = gd_game_paused(0, 0) || gd_game_pre_pause() || game_message_open();
+  input_set_native_ui(native_ui);
   input_update();
+  static bool wait_for_ui_release;
+  wait_for_ui_release = native_ui || (wait_for_ui_release &&
+      (input_held() & (BTN_A | BTN_B | BTN_X | BTN_Y | BTN_LSTICK | BTN_RSTICK)));
   bool transition = pause_transition_active();
   bool flush_log = diagnostics_transition_frame(transition);
-  if (transition && menu_current)
+  if ((transition || native_ui) && menu_current)
     menu_close();
 
   fa_menu_was_open = menu_current != 0; /* an L that closes the menu isn't frame advance's */
-  if (!transition)
+  if (!transition && !wait_for_ui_release)
     menu_controls();
   if (menu_current) {
     watches_sync();
@@ -356,10 +361,10 @@ static void frame(void)
   menus_research_frame();
   bool menu_owns_input = menu_current || input_menu_releasing();
   if (!transition)
-    watches_frame(menu_owns_input);
-  levitate_frame(menu_owns_input);
+    watches_frame(menu_owns_input || wait_for_ui_release);
+  levitate_frame(menu_owns_input, wait_for_ui_release && !transition);
   if (!transition)
-    position_frame(menu_owns_input);
+    position_frame(menu_owns_input || wait_for_ui_release);
   warp_frame();
   gfx_frame();
 
@@ -370,7 +375,7 @@ static void frame(void)
     settings_frame(menu_current != 0);
   }
   settings_log_frame(flush_log);
-  if (!transition)
+  if (!transition && !wait_for_ui_release)
     fa_frame(); /* last: the frame's work is done before the game is held */
 }
 

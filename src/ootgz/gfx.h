@@ -71,6 +71,7 @@ typedef struct {
   uint8_t  alpha[GFX_ROWS];           /* the log: each row's text opacity, 0..255 */
   int16_t  x, y;                      /* GFX_CUSTOM: where, in thousandths of the picture */
   bool     clear;                     /* no background (the log; the input display unless it has one) */
+  bool     mini_hud;                  /* compact watch card */
   bool     fullscreen;                /* menu: reserve the renderer's full menu canvas */
   uint32_t menu_rows, menu_focus;      /* row backgrounds and keyboard/controller focus */
   uint8_t  dashboard;                 /* selected item + 1; 0 for a regular text panel */
