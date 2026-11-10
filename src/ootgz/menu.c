@@ -2,6 +2,7 @@
 
 #include "gfx.h"
 #include "input.h"
+#include "pause.h"
 #include "lang.h"
 #include "sys.h"
 
@@ -14,6 +15,8 @@ static int pool_used;
 
 menu_t *menu_current;
 static menu_t *menu_last; /* where the menu was when it closed; it reopens there */
+bool menu_pause_world = true;
+static bool menu_pause_owned;
 
 void menu_init(menu_t *menu, const char *title, int cap)
 {
@@ -198,10 +201,29 @@ void menu_goto(menu_t *menu)
 
 void menu_edit(menu_item_t *item) { menu_editing = item; }
 
+static void menu_update_pause(void)
+{
+  if (!menu_current || !menu_pause_world) {
+    if (menu_pause_owned)
+      pause_menu_release();
+    menu_pause_owned = false;
+    return;
+  }
+  if (!menu_pause_owned)
+    menu_pause_owned = pause_menu_acquire();
+}
+
+void menu_set_pause_world(bool on)
+{
+  menu_pause_world = on;
+  menu_update_pause();
+}
+
 void menu_open(menu_t *root)
 {
   enter(menu_last ? menu_last : root);
   input_block_game = true;
+  menu_update_pause();
 }
 
 void menu_close(void)
@@ -210,6 +232,9 @@ void menu_close(void)
   /* reopen in the same submenu; from the top level, start at the root */
   menu_last = menu_current && menu_current->parent ? menu_current : 0;
   menu_current = 0;
+  /* A/B/R+Plus must not become gameplay input on the frame that closes the menu. */
+  input_suppress_until_release(input_held());
+  menu_update_pause();
   input_block_game = false;
   gfx_clear();
 }
@@ -310,7 +335,7 @@ static void change_value(menu_item_t *item, int direction)
   }
 }
 
-/* L on an item */
+/* A on an item */
 static void activate_item(menu_item_t *item)
 {
   switch (item->kind) {
@@ -357,40 +382,70 @@ static void activate(menu_item_t *item)
 
 /* --- input ----------------------------------------------------------------------------------- */
 
-/* Numbers: L held makes d-left/right go by NUMBER_BIG_STEP, so their own L (fill) happens when L is
- * let go, and only if the d-pad wasn't used meanwhile. */
-static bool l_down_on_number, l_used_for_big_steps;
+/* Left-stick navigation is converted into the same one-direction repeat events
+ * as the D-pad, but only while menu_input is being processed. A large axis
+ * threshold and dominant-axis selection avoid diagonal double inputs and drift. */
+#define MENU_STICK_THRESHOLD 19000
+#define MENU_STICK_FIRST_DELAY 12
+#define MENU_STICK_REPEAT_INTERVAL 3
+static uint32_t stick_nav_fired;
+static uint32_t stick_nav_held;
+static int stick_nav_countdown;
 
-/* L and d-left/right on a number; true if they used this frame's input */
+static void update_stick_navigation(void)
+{
+  int32_t lx, ly, rx, ry;
+  input_sticks(&lx, &ly, &rx, &ry);
+  (void)rx;
+  (void)ry;
+  int32_t ax = lx < 0 ? -lx : lx;
+  int32_t ay = ly < 0 ? -ly : ly;
+  uint32_t direction = 0;
+  if (ax >= MENU_STICK_THRESHOLD || ay >= MENU_STICK_THRESHOLD) {
+    if (ax > ay)
+      direction = lx < 0 ? BTN_DLEFT : BTN_DRIGHT;
+    else
+      direction = ly < 0 ? BTN_DDOWN : BTN_DUP;
+  }
+  stick_nav_fired = 0;
+  if (direction != stick_nav_held) {
+    stick_nav_held = direction;
+    stick_nav_countdown = MENU_STICK_FIRST_DELAY;
+    stick_nav_fired = direction;
+  } else if (direction && --stick_nav_countdown <= 0) {
+    stick_nav_countdown = MENU_STICK_REPEAT_INTERVAL;
+    stick_nav_fired = direction;
+  }
+}
+
+static bool menu_nav_repeat(uint32_t button)
+{
+  return input_repeat(button) || (stick_nav_fired & button) != 0;
+}
+
+/* L remains a fast-step modifier; A consistently performs the number's action. */
 static bool number_input(menu_item_t *item)
 {
-  bool l_held = (input_held() & BTN_L) != 0;
-  if (input_pressed() & BTN_L) {
-    l_down_on_number = true;
-    l_used_for_big_steps = false;
-  }
-  if (l_held && (input_repeat(BTN_DLEFT) || input_repeat(BTN_DRIGHT))) {
-    l_used_for_big_steps = true;
-    change(item, input_repeat(BTN_DLEFT) ? -NUMBER_BIG_STEP : NUMBER_BIG_STEP);
+  int dir = menu_nav_repeat(BTN_DLEFT) ? -1 : menu_nav_repeat(BTN_DRIGHT) ? 1 : 0;
+  if (dir) {
+    change(item, dir * ((input_held() & BTN_L) ? NUMBER_BIG_STEP : 1));
     return true;
   }
-  if (!l_held && l_down_on_number) {
-    l_down_on_number = false;
-    if (!l_used_for_big_steps)
-      activate(item);
+  if (input_pressed() & BTN_A) {
+    activate(item);
     return true;
   }
-  return (input_pressed() & BTN_L) != 0; /* just pressed: wait for it to be let go */
+  return false;
 }
 
 /* a page of text: the page moves, the cursor stays on return (menu_draw keeps the scroll in range) */
 static void scroll_text_input(menu_t *menu, menu_item_t *item)
 {
-  if (input_repeat(BTN_DUP))
+  if (menu_nav_repeat(BTN_DUP))
     menu->scroll--;
-  else if (input_repeat(BTN_DDOWN))
+  else if (menu_nav_repeat(BTN_DDOWN))
     menu->scroll++;
-  else if (input_pressed() & BTN_L)
+  else if (input_pressed() & BTN_A)
     activate(item);
 }
 
@@ -399,6 +454,11 @@ void menu_input(void)
   menu_t *menu = menu_current;
   if (!menu || !menu->n_items)
     return;
+  update_stick_navigation();
+  if (input_pressed() & BTN_B) {
+    menu_back();
+    return;
+  }
   menu_item_t *item = &menu->items[menu->selected];
   if (menu_editing) {
     if (menu_editing != item || !item->edit || !item->edit(item))
@@ -409,30 +469,42 @@ void menu_input(void)
     scroll_text_input(menu, item);
     return;
   }
-  if (item->kind == MI_NUMBER) {
-    if (number_input(item))
-      return;
-  } else {
-    l_down_on_number = false;
+  if (item->kind == MI_NUMBER && number_input(item))
+    return;
+  /* The root is presented in a two-column grid. Keep D-pad movement spatial:
+   * vertical steps between rows, horizontal steps between columns. */
+  if (!menu->parent && menu->n_items == 9 && menu->items[0].kind == MI_SUBMENU) {
+    int selected = menu->selected;
+    if (menu_nav_repeat(BTN_DLEFT) && selected < 8 && (selected & 1))
+      menu->selected = selected - 1;
+    else if (menu_nav_repeat(BTN_DRIGHT) && selected < 8 && !(selected & 1))
+      menu->selected = selected + 1;
+    else if (menu_nav_repeat(BTN_DUP))
+      menu->selected = selected == 8 ? 6 : selected >= 2 ? selected - 2 : selected;
+    else if (menu_nav_repeat(BTN_DDOWN))
+      menu->selected = selected >= 6 ? 8 : selected + 2;
+    else if (input_pressed() & BTN_A)
+      activate(item);
+    return;
   }
   bool has_parts = item->n_parts > 1;
-  if (input_repeat(BTN_DUP)) {
+  if (menu_nav_repeat(BTN_DUP)) {
     if (!item->on_move || !item->on_move(item, -1))
       move_selection(menu, -1);
-  } else if (input_repeat(BTN_DDOWN)) {
+  } else if (menu_nav_repeat(BTN_DDOWN)) {
     if (!item->on_move || !item->on_move(item, 1))
       move_selection(menu, 1);
-  } else if (has_parts && input_repeat(BTN_DLEFT)) {
+  } else if (has_parts && menu_nav_repeat(BTN_DLEFT)) {
     item->part = item->part > 0 ? item->part - 1 : 0;
-  } else if (has_parts && input_repeat(BTN_DRIGHT)) {
+  } else if (has_parts && menu_nav_repeat(BTN_DRIGHT)) {
     item->part = item->part < item->n_parts - 1 ? item->part + 1 : item->n_parts - 1;
-  } else if (input_repeat(BTN_DLEFT)) {
+  } else if (menu_nav_repeat(BTN_DLEFT)) {
     change(item, -1);
-  } else if (input_repeat(BTN_DRIGHT)) {
+  } else if (menu_nav_repeat(BTN_DRIGHT)) {
     change(item, 1);
-  } else if (item->press && ((input_pressed() & BTN_L) || (item->press_repeat && input_repeat(BTN_L)))) {
+  } else if (item->press && ((input_pressed() & BTN_A) || (item->press_repeat && input_repeat(BTN_A)))) {
     item->press(item, item->part < item->n_parts ? item->part : 0);
-  } else if (input_pressed() & BTN_L) {
+  } else if (input_pressed() & BTN_A) {
     activate(item);
   }
 }
@@ -523,9 +595,9 @@ static const char *item_hint_english(const menu_item_t *item)
   if (item->hint)
     return item->hint[0] ? item->hint : 0; /* "": no hint */
   switch (item->kind) {
-    case MI_NUMBER: return item->action ? "d-left/right: change (L held: by 10)   L: fill"
+    case MI_NUMBER: return item->action ? "d-left/right: change (L held: by 10)   A: fill"
                                         : "d-left/right: change (L held: by 10)";
-    case MI_OPTION: return "d-left/right or L: change";
+    case MI_OPTION: return "d-left/right or A: change";
     default: return 0;
   }
 }
@@ -655,7 +727,7 @@ static const char *current_hint(const menu_t *menu)
   if (menu_editing && menu_editing->edit_hint)
     hint = T(menu_editing->edit_hint);
   if (menu->scroll_text)
-    hint = T("d-up/down: scroll   L: return");
+    hint = T("d-up/down: scroll   A: return");
   return hint;
 }
 
@@ -774,6 +846,33 @@ void menu_draw(void)
   menu_t *menu = menu_current;
   if (!menu)
     return;
+  /* Use the existing safe text renderer for a spacious two-column dashboard.
+   * This is deliberately not a claim of native card/rounded-rectangle support. */
+  if (!menu->parent && menu->n_items == 9 && menu->items[0].kind == MI_SUBMENU) {
+    static const char *const descriptions[8] = {
+      "Position and player", "Movement and cheats",
+      "Collision and actors", "Maps and entrances",
+      "Items and equipment", "Progress and flags",
+      "Watches and diagnostics", "Display and controls"
+    };
+    gfx_begin();
+    gfx_text(3, 1, GFX_TITLE, "SLOPERINAGZ  /  PRACTICE MENU");
+    gfx_text(3, 2, GFX_DIM, menu_pause_world ? "WORLD PAUSED" : "LIVE INSPECTION");
+    gfx_text(3, 3, GFX_DIM, "--------------------------------------------------------");
+    for (int i = 0; i < 8; i++) {
+      int col = (i & 1) ? 33 : 4;
+      int row = 5 + (i / 2) * 4;
+      char label[64];
+      snprintf(label, sizeof(label), "%c %s  >", i == menu->selected ? '>' : ' ', T(menu->items[i].label));
+      gfx_text(col, row, i == menu->selected ? GFX_SELECTED : GFX_NORMAL, label);
+      gfx_text(col + 2, row + 1, GFX_DIM, descriptions[i]);
+    }
+    gfx_text(4, 22, menu->selected == 8 ? GFX_SELECTED : GFX_NORMAL,
+             menu->selected == 8 ? "> Close" : "  Close");
+    gfx_text(4, 24, GFX_DIM, "D-pad: Navigate   A: Select   B: Back   R + Plus: Close");
+    gfx_end();
+    return;
+  }
   const char *hint = current_hint(menu);
   if (menu_editing && menu_editing->edit_alone) { /* out of the way of what's being moved */
     gfx_begin();

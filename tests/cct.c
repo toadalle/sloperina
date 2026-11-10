@@ -120,6 +120,11 @@ static void test_fall(void)
 int main(void)
 {
   test_fall();
+  reset();
+  assert(cct_stop_velocity(actor));
+  assert(velocity_resets == 1 && last_velocity.x == 0 && last_velocity.y == 0 && last_velocity.z == 0);
+  assert(!cct_stop_velocity(actor + 8) && velocity_resets == 1);
+
   vec3f_t p = { 2, 100, -3 };
   reset(); assert(cct_noclip_begin() && toggles == 1);
   assert(cct_noclip_begin() && toggles == 1);

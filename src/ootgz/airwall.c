@@ -470,19 +470,44 @@ static bool game_is_paused(void)
 static int16_t near_order[MAX_WALLS];  /* walls within AW_RANGE of the camera, nearest first */
 static float near_distance[MAX_WALLS];
 
+/* A wall's bounding sphere is wholly outside the camera frustum. This is conservative:
+ * intersecting spheres stay in, so no visible edge is dropped before the exact line clipping. */
+static bool sphere_outside_view(const view_cam_t *cam, const float centre[3], float radius,
+                                float side_norm, float top_norm)
+{
+  float v[3];
+  view_point(cam, centre, v);
+  if (v[2] + radius < NEAR_PLANE)
+    return true;
+  if (v[0] - v[2] * cam->tan_x > radius * side_norm ||
+      -v[0] - v[2] * cam->tan_x > radius * side_norm)
+    return true;
+  if (v[1] - v[2] * cam->tan_y > radius * top_norm ||
+      -v[1] - v[2] * cam->tan_y > radius * top_norm)
+    return true;
+  return false;
+}
+
 /* Fill near_order (an insertion sort) and return how many walls are in it. */
 static int sort_near_walls(const view_cam_t *cam)
 {
   int count = 0;
+  const float side_norm = sqrtf(1 + cam->tan_x * cam->tan_x);
+  const float top_norm = sqrtf(1 + cam->tan_y * cam->tan_y);
   for (int i = 0; i < n_walls; i++) {
     if (!wall_shown(map_wall(i)))
       continue;
     float dx = wall_geo[i].centre[0] - cam->pos[0];
     float dy = wall_geo[i].centre[1] - cam->pos[1];
     float dz = wall_geo[i].centre[2] - cam->pos[2];
-    float distance = sqrtf(dx * dx + dy * dy + dz * dz) - wall_geo[i].radius;
-    if (distance > AW_RANGE)
+    float limit = AW_RANGE + wall_geo[i].radius;
+    float distance_sq = dx * dx + dy * dy + dz * dz;
+    /* Reject the common far case without a square root. */
+    if (distance_sq > limit * limit)
       continue;
+    if (sphere_outside_view(cam, wall_geo[i].centre, wall_geo[i].radius, side_norm, top_norm))
+      continue;
+    float distance = sqrtf(distance_sq) - wall_geo[i].radius;
     int j = count++;
     while (j > 0 && near_distance[j - 1] > distance) {
       near_order[j] = near_order[j - 1];

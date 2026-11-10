@@ -54,6 +54,7 @@ static void put_text(gfx_panel_t *panel, int col, int row, gfx_style_t style, co
 void gfx_begin(void)
 {
   memset(&menu_panel, 0, sizeof(menu_panel));
+  menu_panel.fullscreen = true;
   menu_open = true;
 }
 
@@ -329,7 +330,8 @@ static void measure_panel(gfx_panel_t *panel)
 {
   panel->rows = 0;
   panel->cols = 0;
-  uint32_t hash = FNV_OFFSET_BASIS ^ panel->corner ^ (uint32_t)panel->clear << 8; /* the shadow depends on clear */
+  uint32_t hash = FNV_OFFSET_BASIS ^ panel->corner ^ (uint32_t)panel->clear << 8 ^
+                  (uint32_t)panel->fullscreen << 9; /* geometry/background changes */
   hash = hash_mix(hash, (uint32_t)panel->pad << 9 ^ (uint32_t)panel->clicks << 10 ^
                           (uint32_t)(uint8_t)panel->yoff << 12 ^ (uint32_t)panel->scale_pct << 16);
   for (int i = 0; i < 4; i++) /* the sticks are drawn from these */

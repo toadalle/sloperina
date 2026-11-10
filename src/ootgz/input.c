@@ -41,8 +41,10 @@ static uint32_t repeat_buttons;   /* held since they went down, so they repeat *
 static uint32_t buttons_fired;    /* pressed, or repeating this frame */
 static int32_t stick_axes[4];     /* lx, ly, rx, ry */
 static int repeat_countdown;
+static uint32_t suppress_until_release;
 bool input_block_game;
 uint32_t input_hide_from_game;
+uint32_t input_hide_sticks_from_game;
 
 /* Add one controller's state (one style of one NpadIdType) to this frame's input. */
 static void read_npad(void (*get_states)(int *, void *, int, const uint32_t *), uint32_t npad_id)
@@ -75,6 +77,7 @@ void input_update(void)
   read_npad(hid_detail_joydual, NPAD_NO1);
   read_npad(hid_detail_handheld, NPAD_HANDHELD);
   buttons_pressed = buttons_held & ~previously_held;
+  suppress_until_release &= buttons_held;
 
   buttons_fired = buttons_pressed;
   if (buttons_pressed) {
@@ -93,6 +96,11 @@ void input_update(void)
 
 uint32_t input_held(void) { return buttons_held; }
 uint32_t input_pressed(void) { return buttons_pressed; }
+
+void input_suppress_until_release(uint32_t mask)
+{
+  suppress_until_release |= mask & buttons_held;
+}
 
 bool input_combo(uint32_t mask)
 {
@@ -141,10 +149,15 @@ int32_t input_force_stick[4];
  * advance's buffered input and take out the buttons the game mustn't see. */
 static void filter_game_states(void *states, int count)
 {
-  if (!input_block_game && !input_hide_from_game && !input_force_active)
-    return;
+  bool need_filter = input_block_game || input_hide_from_game || input_hide_sticks_from_game ||
+                     input_force_active || suppress_until_release;
   for (int i = 0; i < count; i++) {
     npad_state_t *state = (npad_state_t *)((char *)states + i * NPAD_STATE_SIZE);
+    /* This runs immediately after the game's HID read, before our end-of-frame hook.
+     * Hide the activation chord here so the stock Plus pause cannot win the race. */
+    bool menu_combo = (state->buttons & PRACTICE_MENU_COMBO) == PRACTICE_MENU_COMBO;
+    if (!need_filter && !menu_combo)
+      continue;
     if (input_block_game) {
       state->buttons = 0;
       state->lx = state->ly = state->rx = state->ry = 0;
@@ -161,7 +174,12 @@ static void filter_game_states(void *states, int count)
         state->ry = input_force_stick[3];
       }
     }
-    state->buttons &= ~(uint64_t)input_hide_from_game;
+    state->buttons &= ~(uint64_t)(input_hide_from_game | suppress_until_release |
+                                  (menu_combo ? PRACTICE_MENU_COMBO : 0));
+    if (input_hide_sticks_from_game & INPUT_HIDE_LEFT_STICK)
+      state->lx = state->ly = 0;
+    if (input_hide_sticks_from_game & INPUT_HIDE_RIGHT_STICK)
+      state->rx = state->ry = 0;
   }
 }
 
@@ -170,7 +188,8 @@ static void filter_game_states(void *states, int count)
   static int hid_wrap_##n(void *out, int count, const uint32_t *id) \
   {                                                                 \
     int result = hid_public_##n(out, count, id);                    \
-    filter_game_states(out, count);                                 \
+    int returned = result > 0 && result <= count ? result : 0;      \
+    filter_game_states(out, returned);                              \
     return result;                                                  \
   }
 WRAP(0) WRAP(1) WRAP(2) WRAP(3) WRAP(4)

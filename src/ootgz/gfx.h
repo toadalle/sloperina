@@ -65,6 +65,7 @@ typedef struct {
   uint8_t  alpha[GFX_ROWS];           /* the log: each row's text opacity, 0..255 */
   int16_t  x, y;                      /* GFX_CUSTOM: where, in thousandths of the picture */
   bool     clear;                     /* no background (the log; the input display unless it has one) */
+  bool     fullscreen;                /* menu: reserve the renderer's full menu canvas */
   uint8_t  pad;                       /* input display: 1 = the controller drawing (nvn.c pad_pixel) */
   int8_t   sticks[4];                 /* ... left x, y, right x, y, -100..100 */
   uint8_t  clicks;                    /* ... bit 0 L3, bit 1 R3, bits 2..5 d-pad up, down, left, right */

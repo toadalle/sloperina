@@ -16,6 +16,10 @@ enum {
   BTN_RS_LEFT = 1u << 20, BTN_RS_UP = 1u << 21, BTN_RS_RIGHT = 1u << 22, BTN_RS_DOWN = 1u << 23,
 };
 
+/* Dedicated practice-menu activation chord. The HID wrapper uses the same constant
+ * so Plus can be hidden from the game on the exact read that sees the chord. */
+#define PRACTICE_MENU_COMBO (BTN_R | BTN_PLUS)
+
 void     input_update(void);       /* once per frame, from the frame hook */
 uint32_t input_held(void);
 uint32_t input_pressed(void);      /* went down this frame */
@@ -24,11 +28,16 @@ bool     input_combo(uint32_t mask);
 /* Pressed, or held long enough to repeat (menu navigation). */
 bool     input_repeat(uint32_t button);
 void     input_sticks(int32_t *lx, int32_t *ly, int32_t *rx, int32_t *ry);
+/* Hide currently-held buttons from the game until each is released. */
+void     input_suppress_until_release(uint32_t mask);
 
 /* While true, the game sees no buttons or sticks. */
 extern bool input_block_game;
 /* Buttons the game never sees (e.g. L while levitate is on). */
 extern uint32_t input_hide_from_game;
+enum { INPUT_HIDE_LEFT_STICK = 1u << 0, INPUT_HIDE_RIGHT_STICK = 1u << 1 };
+/* Stick axes hidden from gameplay while raw input remains available to the mod. */
+extern uint32_t input_hide_sticks_from_game;
 /* given to the game on top of the controller until cleared (frame advance's buffered input) */
 extern bool input_force_active;
 extern uint32_t input_force_buttons;

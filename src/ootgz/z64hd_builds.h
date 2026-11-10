@@ -93,6 +93,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .disp_ptr = 0x4C7E740,
     .camera_ptr = 0x4E98068,
     .frame_counter = 0x4E84BA0,
+    .pause_mgr_ptr = 0x4E97E38,
     .actor_mgr_ptr = 0x4E90D90,
     .vt_life = 0x4B4C460,
     .vt_cct_property = 0x4C34F10,

@@ -45,8 +45,8 @@ The game and SD filesystem are mocked; this does not verify the game's setter/ch
 
 `python tests/run_levitate.py --cc C:/msys64/mingw64/bin/gcc.exe` runs the real levitation step/frame
 logic with a simulated physics record. It checks upward floor corrections, downward drift, wall
-push-back handling, hover, rising platforms, X/B ascent/descent, direction reversal, both-button/R3
-hold, manual descent past upward floor corrections, button masking, menu/drop and record loss/restart.
+push-back handling, hover, rising platforms, X/B ascent/descent, direction reversal, both-button
+hold, R3 ghost toggling, full velocity stop, left-stick gameplay masking, menu/drop and record loss/restart.
 Release tests cover the controller velocity reset, guarded fall-history reset, protection through long drops,
 and ending protection after supported landing. Invalid records are skipped. These tests
 do not simulate the game's collision solver; verify surfaces and transitions in-game separately.
@@ -146,8 +146,9 @@ Lichii runs the game's own rtld, so a working load there is good evidence for ha
 2. **The slot is really unused.** Set a write watchpoint on `main+0x4e9a4d0`..`+8` with the
    GDB stub (as `tools/dpadwatch.py` does) and play a few minutes. Only ootgz should write it.
    If the game does, pick another address and change `Z64HD_HOOK_SLOT`.
-3. **Input.** Open the menu with **R + right stick down**; the log prints the menu. If nothing
-   reacts, check the `npad_state_t` layout in `input.c` (buttons at +8, attributes at +0x20).
+3. **Input.** On the Stage 1 branch, open the menu with **R + Plus**; the stock Plus pause screen
+   must not also open. The log prints the menu. If nothing reacts, check the `npad_state_t` layout
+   in `input.c` (buttons at +8, attributes at +0x20).
 4. **GameData types.** Bool/Enum/Float entries share the Int entry's layout (table size at
    `+0x24`). String64 uses the game's hash table and follows the value pointer from its
    object. The link menu shows the map name if strings work.

@@ -95,6 +95,16 @@ bool cct_reset_vertical_velocity(uintptr_t expected_actor)
   return true;
 }
 
+bool cct_stop_velocity(uintptr_t expected_actor)
+{
+  controller_t current;
+  if (!expected_actor || !resolve(&current) || current.actor != expected_actor)
+    return false;
+  const vec3f_t stopped = { 0, 0, 0 };
+  MAIN_FN(void (*)(uintptr_t, const vec3f_t *), Z64HD_CCT_SET_VELOCITY)(current.body, &stopped);
+  return true;
+}
+
 bool cct_on_ground(uintptr_t expected_actor, bool *grounded)
 {
   controller_t current;

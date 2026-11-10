@@ -1,0 +1,27 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run host regression tests
+        run: |
+          python3 tests/run_js_height.py
+          python3 tests/run_levitate.py
+      - name: Build and stage install trees with devkitA64
+        run: ./docker-make dist
+      - name: Upload Fritchii test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: sloperina-stage1-${{ github.sha }}
+          path: |
+            dist/
+            INSTALLATION.md
+            docs/STAGE1_STATUS.md
+          retention-days: 7

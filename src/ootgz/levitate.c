@@ -8,8 +8,8 @@
  * each (kept only if his drawn position follows; put back at once otherwise). The pointer path to the
  * one that works is logged, so a later version can go straight to it.
  *
- * Levitate (as ootmenu, game.py _float, once per frame): L3 starts floating, L3 again drops him, R3
- * held keeps the height; X rises, B descends, neither hovers. The left stick moves him
+ * Hover: L3 toggles it, R3 toggles ghost collision while hovering, X rises, B descends,
+ * and releasing both holds altitude. The left stick moves him
  * relative to the camera. Walls: the game pushes
  * Link back out of them between our writes; a push-back is a move against his heading (after he has
  * held it for a moment, or the momentum of a turn looks like one), and it marks the wall for a
@@ -35,15 +35,37 @@
 #include "gfx.h"
 #include "input.h"
 #include "link.h"
+#include "pause.h"
 #include "sys.h"
 #include "z64hd.h"
 
 float hypotf(float x, float y); /* from sdk */
 
 bool levitate_enabled;
-bool levitate_through_walls = true;
+bool levitate_through_walls;
 int levitate_speed = 4;       /* rise, units/s */
-int levitate_move_speed = 6;  /* stick, units/s */
+#define FLIGHT_SPEED_DEFAULT 6 /* original mod flight move speed */
+int levitate_move_speed = FLIGHT_SPEED_DEFAULT;  /* stick, units/s */
+
+/* Shared with the move-speed menu options: one Y/A tap moves one preset. */
+static const int flight_speeds[] = { 2, 4, 6, 8, 12, 20, 30 };
+
+static void adjust_flight_speed(int direction)
+{
+  int index = 0;
+  if (direction > 0) {
+    while (index < (int)(sizeof(flight_speeds) / sizeof(flight_speeds[0])) - 1 &&
+           flight_speeds[index] <= levitate_move_speed)
+      index++;
+  } else {
+    index = (int)(sizeof(flight_speeds) / sizeof(flight_speeds[0])) - 1;
+    while (index > 0 && flight_speeds[index] >= levitate_move_speed)
+      index--;
+  }
+  levitate_move_speed = flight_speeds[index];
+  log_printf("levitate: flight speed %d", levitate_move_speed);
+  gfx_notice(direction > 0 ? "flight faster" : "flight slower");
+}
 
 /* the physics record: position (3 doubles), then motion state (12 words) */
 #define RECORD_POS_SIZE 24
@@ -458,7 +480,13 @@ static void drop(void)
     return;
   }
   floating = false;
+  levitate_through_walls = false; /* ghost is scoped to one hover session */
   if (moving_link) {
+    /* The CCT can retain horizontal velocity after a ghost hover despite zeroing
+     * the scanned record. Stop it via the queued controller API before handing
+     * collision back, rather than allowing an old impulse on the first frame. */
+    bool stopped = cct_stop_velocity(float_actor);
+    (void)stopped; /* Host builds compile log_printf away; preserve the queued stop. */
     bool reset = cct_reset_vertical_velocity(float_actor);
     cct_clear_fall_distance(float_actor);
     landing_actor = float_actor;
@@ -509,12 +537,11 @@ static void track_frozen(double cx, double cy, double cz, vec3f_t drawn)
   last_drawn = drawn;
 }
 
-/* X/B control height; neither, both or R3 hold the current height. */
+/* X/B control height; neither or both hold the current height. */
 static void steer(double dt)
 {
   float_clock += dt;
-  bool hold_height = input_held() & BTN_RSTICK;
-  int vertical = hold_height ? 0 : !!(input_held() & BTN_X) - !!(input_held() & BTN_B);
+  int vertical = !!(input_held() & BTN_X) - !!(input_held() & BTN_B);
   double rise = levitate_speed > 0 ? levitate_speed : 4;
   double move = levitate_move_speed;
   if (!vertical || vel_y * vertical < 0)
@@ -580,7 +607,7 @@ static void float_step(double dt, bool menu_open)
   link_drawn_pos(&drawn);
   track_frozen(cx, cy, cz, drawn);
   uint32_t buttons = input_held();
-  int vertical = buttons & BTN_RSTICK ? 0 : !!(buttons & BTN_X) - !!(buttons & BTN_B);
+  int vertical = !!(buttons & BTN_X) - !!(buttons & BTN_B);
   bool descend_through_floor = !menu_open && levitate_through_walls && vertical < 0;
   if (cy > pos_y && !descend_through_floor && !cct_noclip_active())
     pos_y = cy;
@@ -607,7 +634,7 @@ static void float_step(double dt, bool menu_open)
   }
   if (cct_noclip_active()) {
     vec3f_t position = { (float)pos_x, (float)(pos_y - controller_y_offset), (float)pos_z };
-    if (!cct_noclip_move(&position)) {
+    if (!cct_noclip_move(&position) || !cct_stop_velocity(float_actor)) {
       drop();
       gfx_notice("levitate: controller unavailable; stopped");
       return;
@@ -619,7 +646,8 @@ static void float_step(double dt, bool menu_open)
   for (int i = 0; i < MOTION_WORDS; i++)
     cleared &= ((volatile uint32_t *)(record + RECORD_POS_SIZE))[i] == 0;
   write_record(record, pos_x, pos_y, pos_z, (float)vel_x, (float)vel_y, (float)vel_z, record_has_motion && cleared);
-  if (!cct_reset_vertical_velocity(float_actor) || !cct_clear_fall_distance(float_actor)) {
+  if ((!cct_noclip_active() && !cct_reset_vertical_velocity(float_actor)) ||
+      !cct_clear_fall_distance(float_actor)) {
     drop();
     gfx_notice("levitate: fall protection unavailable; stopped");
     return;
@@ -843,12 +871,14 @@ static void handle_l3(bool menu_open)
 {
   if (!levitate_enabled) {
     drop();
-  } else if (!menu_open && (input_pressed() & BTN_LSTICK)) {
+  } else if (!menu_open && (input_pressed() & BTN_LSTICK) && !(input_held() & (BTN_L | BTN_R))) {
+    /* L/R + L3 is reserved by frame advance; avoid a hover toggle as a side effect. */
     if (floating) {
       drop();
       gfx_notice("levitate off");
     } else {
       floating = true;
+      levitate_through_walls = false; /* always enter hover with normal collision */
       quiet_search = false;
       gfx_notice("levitate on");
     }
@@ -866,13 +896,13 @@ static bool search_running(void)
       search_failed();
     }
     if (search_state == SEARCH_FAILED)
-      floating = false;
+      drop();
     return true;
   }
   if (search_state == SEARCH_TESTING) {
     test_step();
     if (search_state == SEARCH_FAILED)
-      floating = false;
+      drop();
     return true;
   }
   return false;
@@ -950,7 +980,50 @@ static void frame(bool menu_open)
     hold_frames--;
   double dt = frame_seconds();
   protect_landing(menu_open);
+  /* The verified PauseManager provides a read-only sign that the game is
+   * transitioning. Stop writing Link's position immediately and restore
+   * collision ownership before old scene/controller objects are torn down.
+   * Never re-enter hover while these native requests are active. */
+  if (pause_transition_active()) {
+    if (floating) {
+      log_printf("levitate: native transition pause active, releasing hover");
+      drop();
+      gfx_notice("hover off: scene transition");
+    }
+    if (walking_through || phasing)
+      walls_stop();
+    speed_known = false;
+    walls_known = false;
+    return;
+  }
   handle_l3(menu_open);
+  if (!menu_open && floating) {
+    uint32_t speed_buttons = input_pressed() & (BTN_Y | BTN_A);
+    /* Both pressed at once are a no-op; other input stays fully available. */
+    if (speed_buttons == BTN_Y)
+      adjust_flight_speed(-1);
+    else if (speed_buttons == BTN_A)
+      adjust_flight_speed(1);
+  }
+  /* R + R3 is contextual: flight-speed reset in hover, and an ordinary
+   * walking wall-pass toggle otherwise. Reuse the existing wall bypass,
+   * which leaves standard floor collision on until actually blocked and
+   * holds the current feet height only during a pass. */
+  if (!menu_open && !floating && (input_held() & BTN_R) && (input_pressed() & BTN_RSTICK)) {
+    cheats[CHEAT_WALLS] = !cheats[CHEAT_WALLS];
+    input_suppress_until_release(BTN_RSTICK);
+    gfx_notice(cheats[CHEAT_WALLS] ? "walk through walls on" : "walk through walls off");
+  }
+  if (!menu_open && floating && (input_pressed() & BTN_RSTICK)) {
+    if (input_held() & BTN_R) {
+      /* R + R3 resets the flight-speed preset. Do not toggle ghost. */
+      levitate_move_speed = FLIGHT_SPEED_DEFAULT;
+      gfx_notice("flight speed reset: 6");
+    } else {
+      levitate_through_walls = !levitate_through_walls;
+      gfx_notice(levitate_through_walls ? "ghost mode on" : "ghost mode off");
+    }
+  }
 
   if (search_running())
     return;
@@ -960,6 +1033,9 @@ static void frame(bool menu_open)
   if (search_state == SEARCH_READY && !hold_frames && (!sys_mapped(record, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W) ||
       (!record_follows_link() && !(moving_link && frozen_frames)))) {
     log_printf("levitate: lost Link's record (new area?)");
+    /* Don't silently abandon a ghost CCT owner when the record goes stale:
+     * drop() revalidates writes and restores the controller when possible. */
+    drop();
     record = 0;
     search_state = SEARCH_IDLE;
     moving_link = false;
@@ -1025,7 +1101,9 @@ void levitate_frame(bool menu_open)
   /* Update after toggles, failed searches and scene changes as well as normal steps.
    * Our input reads remain raw; only the game's HID wrappers mask these buttons. */
   input_hide_from_game = (levitate_enabled ? BTN_LSTICK : 0) |
-                         (floating ? BTN_RSTICK | BTN_X | BTN_B : 0);
+                         (floating ? BTN_RSTICK | BTN_X | BTN_B | BTN_Y | BTN_A : 0);
+  /* Hover owns horizontal movement; keep the right stick available to the camera. */
+  input_hide_sticks_from_game = floating ? INPUT_HIDE_LEFT_STICK : 0;
 }
 
 const char *levitate_state(void)
@@ -1038,7 +1116,7 @@ const char *levitate_state(void)
       return "not found";
     default:
       if (moving_link)
-        return "floating";
+        return levitate_through_walls ? "ghost" : "floating";
       if (floating)
         return "starting";
       return record ? "ready" : "off";
