@@ -160,3 +160,11 @@ Fritchii runtime feedback confirms **normal hover (ghost OFF) can force Link thr
 
 - R + R3 (right-stick click) while levitating resets horizontal flight speed to the original mod's default of **6 units/s**, with priority over the R3 ghost toggle. Plain R3 still toggles ghost. This is the hover preset, **not** a modification to ordinary grounded Link movement speed.
 - The bottom-left watches HUD includes a separate `flight speed` row for the selected hover movement-speed setting. The existing `speed` row remains a measured Link velocity. The additional line is deliberately outside the persisted watch IDs, avoiding saved-ID migration; it follows watch HUD visibility and placement.
+
+### Loading-zone crossing while levitating (new runtime report)
+
+Fritchii reports an issue when Link passes through a loading/scene-transition zone while levitating. **Exact observed outcome still needs classification**: transition may fire and leave hover/ghost state stale, may fail to trigger, or may trigger repeatedly/softlock. Do not assume which occurred.
+
+The mod currently tracks a scanned Link physics record and a CCT ForceNoHit owner across frames. It attempts to re-resolve a stale actor/record after a scene transition, but it does not have a proven loading-zone crossing callback or a verified transition-ownership boundary. Existing `GD_STR_NEXT_MAP` in `gamedata.h` and the warp module provide potential transition signals, but the presence/absence semantics have not been validated for natural exits.
+
+Codex: trace loading-zone trigger and scene change lifecycle, ensure hover/ghost stops safely and collision ownership is restored before unloading the old controller; avoid reusing stale physics pointers or resuming hover automatically in the new scene. Test natural and mod-triggered transitions with ghost both on and off, high-speed entry, repeated crossings, and pause/menu interactions. **Do not** disable trigger volumes globally to implement this; desired zone activation control is a separate opt-in feature.
