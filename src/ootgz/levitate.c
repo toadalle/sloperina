@@ -464,6 +464,7 @@ static void drop(void)
      * the scanned record. Stop it via the queued controller API before handing
      * collision back, rather than allowing an old impulse on the first frame. */
     bool stopped = cct_stop_velocity(float_actor);
+    (void)stopped; /* Host builds compile log_printf away; preserve the queued stop. */
     bool reset = cct_reset_vertical_velocity(float_actor);
     cct_clear_fall_distance(float_actor);
     landing_actor = float_actor;

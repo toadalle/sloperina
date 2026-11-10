@@ -128,3 +128,21 @@ the repository's existing staged install trees, including `dist/lichii` for
 Lichii/Fritchii-style mod directories. A green workflow confirms host behavior
 covered by those mocks plus native compilation/linking; it still does **not**
 count as Fritchii runtime validation.
+
+## Fritchii runtime findings (2026-11-10)
+
+- **Confirmed:** R + Plus opens the practice menu, controller ghost movement is smoother, but normal-hover collision is not reliable (can cross walls without ghost).
+- **Confirmed:** ghost mode does **not** give the camera noclip. The camera continues to collide with the scene and can remain behind a wall while Link moves through it. Do not write camera position fields without establishing camera update ownership and a safe restore path.
+- **Confirmed:** ledge-grab/climb interaction can interrupt ghost levitation. Link's character controller ForceNoHit is not a complete player action/state override. Identify the actual player traversal state and a safe suppression mechanism before attempting to patch it; blanket input suppression is insufficient because ledge grab is collision-triggered.
+- **Observed:** after temporarily failing to stand properly on release, ordinary standing recovered. Treat the landing regression as intermittent/unconfirmed; test both release from normal hover and release from ghost, with landing on flat ground and after a scene transition. The cleanup branch now queues a CCT velocity stop during release; this is **not** a confirmed fix for grounding.
+- **UI:** first runtime screenshot showed an enlarged traditional text menu rather than the proposed two-column dashboard. The branch now renders a text-only two-column root layout inside the existing renderer. Card backgrounds, font design, and native GUI controls remain unimplemented.
+- **Pause race:** one screenshot shows the native system pause UI underneath the practice menu. The R+Plus HID filter is not confirmed to suppress Plus on all in-game input paths/frames. Investigate state sequencing, HID routes, and close-frame masking before considering pause interception fully verified.
+- **Collision visualization:** current Scene > Collision settings control only the existing **air walls** overlay. The desired categorized death/barrier/loading-zone renderer, toggleable classes and activation controls still require new verified scene/physics hooks, native overlay support, and classification. No placeholder options are introduced that pretend to implement them.
+
+### Codex handoff priorities
+
+1. Establish action/state hooks to prevent ledge grabs and other traversal events while ghost hover owns Link, with explicit restoration on disable, transitions and failures.
+2. Identify native camera collision/follow state; offer an opt-in camera ghost mode with owner checks, no stale pointers and proper restoration, while preserving right-stick rotation.
+3. Trace R+Plus native pause leakage using the real HID routing and fix it without suppressing unrelated Plus behavior.
+4. Validate hover release and standard-hover collision, especially the difference between ForceNoHit ownership and record-only motion.
+5. Replace root/menu text styling with real independent cards/layout primitives only after renderer architecture review; add actual scene-layer categories with measured GPU cost and verified semantics.
