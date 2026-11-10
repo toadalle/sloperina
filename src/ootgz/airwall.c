@@ -11,6 +11,7 @@
 #include "airwall.h"
 
 #include "data.h"
+#include "diagnostics.h"
 #include "gamedata.h"
 #include "link.h"
 #include "lang.h"
@@ -551,6 +552,21 @@ static int sort_near_walls(const view_cam_t *cam)
   return count;
 }
 
+static void add_world_cross(aw_dot_t *out, int *n, const view_cam_t *cam, const float point[3],
+                            uint8_t color, float radius)
+{
+  float centre[3], sx, sy;
+  view_point(cam, point, centre);
+  if (*n + 2 > MAX_DOTS || centre[2] <= NEAR_PLANE)
+    return;
+  view_screen(cam, centre, &sx, &sy);
+  if (sx > .01f && sx < .99f && sy > .01f && sy < .99f) {
+    float x = sx * REF_WIDTH, y = sy * REF_HEIGHT;
+    add_rect(out, n, x - radius, y, x + radius, y, color);
+    add_rect(out, n, x, y - radius, x, y + radius, color);
+  }
+}
+
 void airwall_frame(bool menu_open)
 {
   update_map();
@@ -558,9 +574,15 @@ void airwall_frame(bool menu_open)
   int next = published == 0 ? 1 : 0;
   int n = 0;
   bool enabled = airwalls_shown || loading_zones_shown || void_zones_shown;
-  bool draw = enabled && n_walls && !menu_open && !game_is_paused();
+  vec3f_t fall;
+  bool show_fall = void_zones_shown && diagnostics_last_fall(current_map_name, &fall);
+  bool draw = enabled && (n_walls || show_fall) && !menu_open && !game_is_paused();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
+    if (show_fall) {
+      float point[3] = { fall.x, fall.y, fall.z };
+      add_world_cross(dots[next], &n, &cam, point, AW_FALL_SAMPLE, 9);
+    }
     /* nearest wall first, so the dot budget goes to what's close */
     int n_walls_near = sort_near_walls(&cam);
     for (int k = 0; k < n_walls_near && n < MAX_DOTS; k++) {
@@ -573,18 +595,8 @@ void airwall_frame(bool menu_open)
       };
       uint8_t color = colors[wall->kind];
       const __typeof__(wall_geo[0]) *geo = &wall_geo[i];
-      if (wall->kind >= VOLUME_LOADING && n + 2 <= MAX_DOTS) {
-        float centre[3], sx, sy;
-        view_point(&cam, geo->centre, centre);
-        if (centre[2] > NEAR_PLANE) {
-          view_screen(&cam, centre, &sx, &sy);
-          if (sx > .01f && sx < .99f && sy > .01f && sy < .99f) {
-            float x = sx * REF_WIDTH, y = sy * REF_HEIGHT;
-            add_rect(dots[next], &n, x - 5, y, x + 5, y, color);
-            add_rect(dots[next], &n, x, y - 5, x, y + 5, color);
-          }
-        }
-      }
+      if (wall->kind >= VOLUME_LOADING)
+        add_world_cross(dots[next], &n, &cam, geo->centre, color, 5);
       /* Reduce detail under pressure instead of dropping the whole outline.
        * No nearby volume can spend more than one fifth of the frame budget. */
       int budget = MAX_DOTS - n;

@@ -43,6 +43,7 @@ struct z64hd_build {
   uint32_t vt_message_dialog; /* zero until verified for this build */
   uint32_t vt_map_screen;
   uint32_t event_mgr_ptr;
+  bool event_flow_layout; /* current-flow fields verified for this build */
   uint32_t event_req_ctor;
   uint32_t event_req_submit;
   uint32_t event_req_sub_dtor;

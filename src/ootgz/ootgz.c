@@ -346,6 +346,7 @@ static void frame(void)
       (input_held() & (BTN_A | BTN_B | BTN_X | BTN_Y | BTN_LSTICK | BTN_RSTICK)));
   bool transition = pause_transition_active();
   bool flush_log = diagnostics_transition_frame(transition);
+  flush_log |= diagnostics_fall_frame();
   if ((transition || native_ui) && menu_current)
     menu_close();
 

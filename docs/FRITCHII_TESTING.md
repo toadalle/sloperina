@@ -42,6 +42,10 @@ available on 1.0.0 where the corresponding fields can be read.
    lists counts by category and the nearest standalone void-out trigger. The
    overlay draws through scenery and caps each frame at 20 volumes and 720
    rectangle commands. Dense terrain wireframe needs a separate batched GPU path.
+   The small cross marks a sensor's center when that center is in view.
+   Barrier outlines have no center marker. On 1.1.1, a larger orange cross
+   marks Link's first sampled position during the most recent fall event in
+   the current map. It is a recorded point, not a trigger boundary.
 5. **Camera and ledges.** Capture Quick Snapshot in open space, then fly through
    a wall or near a ledge. If the camera or Link gets stuck, immediately take
    another Quick Snapshot, followed by Deep Diagnostics. Include the map,
@@ -82,3 +86,12 @@ frame, and the game can continue updating while the live menu is open.
 The native camera update owner, camera collision query, ledge action owner,
 and collision-aware CCT sweep remain unverified. The build adds read-only
 camera evidence to compare the two snapshots.
+
+## Tracing an out-of-bounds fall
+
+In 1.1.1, reproduce the fall with the practice menu closed. After Link returns,
+take a Quick Snapshot or Deep Diagnostics. The manifest keeps the last observed
+`DmF_SY_FallDown`, the native abyss type if readable, and Link's coordinates
+before and during the event. It also logs the event to the SD card. The fall
+flow is shared by several abyss types, so its name alone does not identify the
+predicate that triggered it. See [FINDINGS](FINDINGS.md#96-abyss-event-tracing).

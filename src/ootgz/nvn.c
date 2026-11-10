@@ -1196,6 +1196,7 @@ static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_LOADING] = { 1.0f, 0.86f, 0.23f, 1.0f },
   [AW_VOID] = { 1.0f, 0.26f, 0.22f, 1.0f },
   [AW_GROTTO_SAFETY] = { 0.79f, 0.48f, 1.0f, 1.0f },
+  [AW_FALL_SAMPLE] = { 1.0f, 0.50f, 0.15f, 1.0f },
 };
 
 /* enemy health (enemyhp.c) */

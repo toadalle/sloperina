@@ -870,3 +870,22 @@ Entries 1 to 4 and 14 were empty; 35 and 40 had no name getter.
   hidden as a control: also `+0x30` 8 -> 0, `+0x6E4` ffffffff -> 0 and `+0x518` 0x100 -> 0x42f changed with it.
 - A dungeon keeps all its rooms' actors: Forest Temple had 32+ live enemies, so scene > enemy health keeps the 32
   nearest Link within 30 m. Its summary (`actors:` lines) goes to the log every 300 frames while it's on.
+### 9.6 Abyss event tracing
+
+On game 1.1.1, `DmF_SY_FallDown` is a resident event. Its flow calls
+`EventPlayerAbyss` and `EventPlayerPostAbyss` and branches on several values
+of `AbyssType`. `SelectorEventQueryCheckPlayerAbyssType` at `main+0x2B1B620`
+compares the requested type against Link's player component `+0x191C`
+(`actor+0x270` → `components+0x358`). The routine at `main+0x82C510`
+evaluates several inputs, including physics contact data and player flags,
+before selecting the type at `main+0x82C690`. This is a shared decision path.
+Its generic out-of-bounds predicate and any scene-specific threshold are
+still unconfirmed.
+
+The active event reader follows `main+0xBCC0B0` using mapped reads instead of
+calling the getter, which writes a string terminator. The adult Kakariko test
+capture was taken after the relocation, with Link grounded at full health.
+The map exporter finds two grotto fall-safety sensors and no standalone void
+sensor there. The pre-existing capture does not establish which native check
+caused this fall. The runtime trace retains the last active flow, its observed
+type and sample positions for an after-respawn capture.

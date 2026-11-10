@@ -85,6 +85,7 @@ static const struct z64hd_build z64hd_builds[] = {
     .vt_message_dialog = 0x4BE9678,
     .vt_map_screen = 0x4BE8300,
     .event_mgr_ptr = 0x4C7E090,
+    .event_flow_layout = true,
     .event_req_ctor = 0xD79F10,
     .event_req_submit = 0xD7A820,
     .event_req_sub_dtor = 0x20B6F0,

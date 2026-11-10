@@ -1863,6 +1863,15 @@ static void text_nearest_death(menu_item_t *it, char *buf, int len)
   airwall_nearest_death(buf, len);
 }
 
+static void text_last_fall(menu_item_t *it, char *buf, int len)
+{
+  vec3f_t pos;
+  if (diagnostics_last_fall(gd_get_str(GD_STR_MAP), &pos))
+    snprintf(buf, len, TF("last fall sample  %.1f / %.1f / %.1f"), pos.x, pos.y, pos.z);
+  else
+    snprintf(buf, len, TF("no fall event sampled here"));
+}
+
 static void text_air_wall_link(menu_item_t *it, char *buf, int len)
 {
   char text[64];
@@ -1886,16 +1895,16 @@ static void build_scene(void)
     enemy_hp->log_label = "enemy health:";
   }
 
-  menu_init(&m_collision, "collision", 8);
+  menu_init(&m_collision, "collision", 9);
   menu_add_heading(&m_collision, "scene overlays");
   menu_item_t *loading = menu_add_check(&m_collision, "show loading zones", get_scene_volume,
                                         set_scene_volume, (intptr_t)&loading_zones_shown);
   menu_item_t *abyss = menu_add_check(&m_collision, "show void zones", get_scene_volume,
                                        set_scene_volume, (intptr_t)&void_zones_shown);
   if (loading)
-    loading->hint = "Yellow: map and grotto entrance triggers";
+    loading->hint = "Yellow: map and grotto entrance triggers. Cross marks the center";
   if (abyss)
-    abyss->hint = "Red: void-out triggers. Violet: grotto fall-safety triggers";
+    abyss->hint = "Red: placed void triggers. Violet: grotto safety. Orange cross: last fall sample";
   menu_item_t *show = menu_add_check(&m_collision, "show invisible barriers", get_air_walls_shown, set_air_walls_shown, 0);
   if (show) {
     show->hint = "Blue: invisible walls that block Link";
@@ -1908,6 +1917,7 @@ static void build_scene(void)
   }
   menu_add_text(&m_collision, text_air_wall_summary, 0);
   menu_add_text(&m_collision, text_nearest_death, 0);
+  menu_add_text(&m_collision, text_last_fall, 0);
   menu_add_text(&m_collision, text_air_wall_link, 0);
 }
 

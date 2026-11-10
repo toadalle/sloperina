@@ -20,6 +20,106 @@
 static char report[REPORT_CAPACITY];
 static size_t report_size;
 
+static struct {
+  char map[GD_STR_LEN];
+  unsigned frame;
+  uint32_t abyss_type;
+  vec3f_t before, first, lowest;
+  bool has_before, has_position;
+} last_fall;
+
+/* Read the active flow using the same pointer chain as main+0xBCC0B0.
+ * The game's getter writes a terminator. Read only the known name here. */
+static bool fall_flow_active(void)
+{
+  static const char flow[] = "DmF_SY_FallDown";
+  uintptr_t holder = sys_ptr(MAIN(z64hd_game->event_mgr_ptr));
+  uintptr_t manager = holder ? sys_ptr(holder) : 0;
+  uintptr_t context = manager ? sys_ptr(manager + 0x68) : 0;
+  if (!context || !sys_mapped(context, 0xF1C, SYS_PERM_R))
+    return false;
+  unsigned count = *(const volatile uint32_t *)(context + 0xEB0);
+  unsigned slot = *(const volatile uint32_t *)(context + 0xF18);
+  uintptr_t slots = sys_ptr(context + 0xEB8);
+  if (!slots || slot >= count || count > 4096 || slots > UINTPTR_MAX - slot * sizeof(uintptr_t))
+    return false;
+  uintptr_t entry = sys_ptr(slots + slot * sizeof(uintptr_t));
+  uintptr_t name = entry ? sys_ptr(entry + 8) : 0;
+  if (!name || !sys_mapped(name, sizeof(flow), SYS_PERM_R))
+    return false;
+  for (unsigned i = 0; i < sizeof(flow); i++)
+    if (((const volatile char *)name)[i] != flow[i])
+      return false;
+  return true;
+}
+
+bool diagnostics_fall_frame(void)
+{
+  static bool was_active, had_previous;
+  static uintptr_t previous_actor;
+  static vec3f_t previous;
+  if (!z64hd_game || !z64hd_game->event_flow_layout)
+    return false;
+  bool active = fall_flow_active();
+  vec3f_t feet;
+  uintptr_t actor = link_actor();
+  bool have_feet = actor && link_drawn_pos(&feet);
+  if (active && !was_active) {
+    const char *map = gd_get_str(GD_STR_MAP);
+    snprintf(last_fall.map, sizeof(last_fall.map), "%.63s", map ? map : "");
+    last_fall.frame = frame_counter();
+    last_fall.abyss_type = 0;
+    last_fall.has_before = had_previous && actor == previous_actor;
+    last_fall.before = previous;
+    last_fall.has_position = false;
+    log_printf("fall: DmF_SY_FallDown active frame=%u map=%.30s", last_fall.frame, last_fall.map);
+    if (last_fall.has_before)
+      log_printf("fall: previous feet %.3f %.3f %.3f", previous.x, previous.y, previous.z);
+  }
+  if (active && actor && !last_fall.abyss_type) {
+    /* SelectorEventQueryCheckPlayerAbyssType (main+0x2B1B620) reads
+     * this field. Keep its raw value until the types have been mapped. */
+    uintptr_t components = sys_ptr(actor + 0x270);
+    uintptr_t player = components ? sys_ptr(components + 0x358) : 0;
+    uint32_t type;
+    if (player && sys_ptr(player + 0x18) == actor && sys_read32(player + 0x191C, &type) && type) {
+      last_fall.abyss_type = type;
+      log_printf("fall: native abyss type %u", type);
+    }
+  }
+  if (active && have_feet) {
+    if (!last_fall.has_position) {
+      last_fall.has_position = true;
+      last_fall.first = last_fall.lowest = feet;
+      log_printf("fall: first active feet %.3f %.3f %.3f", feet.x, feet.y, feet.z);
+    } else if (feet.y < last_fall.lowest.y) {
+      last_fall.lowest = feet;
+    }
+  }
+  if (have_feet)
+    previous = feet;
+  had_previous = have_feet;
+  previous_actor = actor;
+  bool changed = was_active != active;
+  was_active = active;
+  return changed;
+}
+
+bool diagnostics_last_fall(const char *map, vec3f_t *position)
+{
+  if (!map || !last_fall.map[0] || !last_fall.has_position)
+    return false;
+  for (unsigned i = 0; i < sizeof(last_fall.map); i++) {
+    if (map[i] != last_fall.map[i])
+      return false;
+    if (!map[i]) {
+      *position = last_fall.first;
+      return true;
+    }
+  }
+  return false;
+}
+
 static void append(const char *format, ...) __attribute__((format(printf, 1, 2)));
 static void append(const char *format, ...)
 {
@@ -215,6 +315,19 @@ void diagnostics_dump(bool deep)
   vec3f_t pose[2];
   uintptr_t cam = sample_link_and_camera(pose);
   sample_controller();
+  if (last_fall.frame) {
+    append("Last observed DmF_SY_FallDown frame=%u map=%s\n", last_fall.frame, last_fall.map);
+    if (last_fall.abyss_type)
+      append("Native abyss type=%u\n", last_fall.abyss_type);
+    if (last_fall.has_before)
+      append("Previous feet XYZ=%.3f %.3f %.3f\n", last_fall.before.x, last_fall.before.y, last_fall.before.z);
+    if (last_fall.has_position) {
+      append("First active feet XYZ=%.3f %.3f %.3f\n", last_fall.first.x, last_fall.first.y, last_fall.first.z);
+      append("Lowest active feet XYZ=%.3f %.3f %.3f\n", last_fall.lowest.x, last_fall.lowest.y, last_fall.lowest.z);
+    }
+  } else {
+    append("Fall event sampling %s\n", z64hd_game->event_flow_layout ? "active; no fall flow observed" : "unavailable");
+  }
 
   uint8_t record[72];
   size_t size = 0;
