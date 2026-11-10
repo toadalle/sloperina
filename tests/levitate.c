@@ -6,6 +6,7 @@
 #include "../src/ootgz/levitate.c"
 
 static double physics[9];
+_Alignas(FAST_SCAN_STRIDE) static unsigned char scan_heap[512];
 static unsigned char actor_memory[1024];
 static float cam[24];
 static vec3f_t drawn_pos;
@@ -46,7 +47,8 @@ bool sys_mapped(uintptr_t a, size_t n, uint32_t perm)
 {
   (void)perm;
   return mapped && ((a >= (uintptr_t)physics && a + n <= (uintptr_t)(physics + 9)) ||
-                    (a >= (uintptr_t)cam && a + n <= (uintptr_t)(cam + 24)));
+                    (a >= (uintptr_t)cam && a + n <= (uintptr_t)(cam + 24)) ||
+                    (a >= (uintptr_t)scan_heap && a + n <= (uintptr_t)(scan_heap + sizeof(scan_heap))));
 }
 uint32_t sys_query_memory(sys_meminfo_t *m, uint64_t a) { (void)m; (void)a; return 1; }
 void sys_regions(uint32_t perm, void (*fn)(uintptr_t, size_t, void *), void *ctx)
@@ -106,6 +108,33 @@ static void step(void)
 {
   sync_drawn();
   float_step(1.0 / 30.0, false);
+}
+
+static void test_cold_scan(void)
+{
+  const uintptr_t base = (uintptr_t)scan_heap;
+  const double position[3] = { 10, 100 + PHYS_Y, 30 };
+  mapped = true;
+  drawn_pos = (vec3f_t){ 10, 100, 30 };
+  n_heap_regions = 1;
+  heap_regions[0].lo = base;
+  heap_regions[0].hi = base + sizeof(scan_heap);
+
+  memset(scan_heap, 0, sizeof(scan_heap));
+  memcpy(scan_heap + FAST_SCAN_STRIDE, position, sizeof(position));
+  start_full_scan();
+  fast_scan = true;
+  assert(scan_step() && candidate.addr == base + FAST_SCAN_STRIDE);
+
+  memset(scan_heap, 0, sizeof(scan_heap));
+  memcpy(scan_heap + sizeof(double), position, sizeof(position));
+  start_full_scan();
+  fast_scan = true;
+  assert(!scan_step());
+  start_full_scan();
+  assert(scan_step() && candidate.addr == base + sizeof(double));
+  n_heap_regions = 0;
+  puts("PASS: cold search finds aligned records and falls back for other addresses");
 }
 
 static void test_release(void)
@@ -555,5 +584,6 @@ int main(void)
   test_transition_handoff();
   test_walk_wall_shortcut();
   test_controller_path();
+  test_cold_scan();
   return 0;
 }

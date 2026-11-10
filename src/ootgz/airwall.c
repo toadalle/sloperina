@@ -616,7 +616,7 @@ void airwall_summary(char *buf, int len)
 
 void airwall_nearest_death(char *buf, int len)
 {
-  vec3f_t link;
+  vec3f_t link = { 0 };
   int nearest = -1;
   float best = 0;
   if (link_drawn_pos(&link)) {
@@ -637,6 +637,7 @@ void airwall_nearest_death(char *buf, int len)
     return;
   }
   const float *p = wall_geo[nearest].centre;
+  float x = p[0] - link.x, y = p[1] - link.y, z = p[2] - link.z;
   snprintf(buf, len, TF("nearest death: %.0fm  %.1f / %.1f / %.1f"),
-           (double)sqrtf(best), (double)p[0], (double)p[1], (double)p[2]);
+           (double)sqrtf(x * x + y * y + z * z), (double)p[0], (double)p[1], (double)p[2]);
 }
