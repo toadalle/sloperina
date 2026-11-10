@@ -17,6 +17,13 @@
 #define PAUSE_FLAG_MASK 0x80000000u
 #define PAUSE_TYPES_MAX 64
 #define GAME_PAUSE_ID 0xBA597383u
+/* MurmurHash3(name), seed 0 (verified against GamePause). These four
+ * PauseManager types represent actual loading or scene-transition work,
+ * not the practice menu's GamePause request. */
+#define LOADING_PAUSE_ID          0x0EAFE200u
+#define SCENE_TRANSITION_ID       0xEC94B0F4u
+#define EVENT_BANC_CHANGE_ID     0x95DFB2F7u
+#define SYSTEM_LOADING_PAUSE_ID  0x956925E5u
 
 static volatile uint32_t *owned_count;
 static uintptr_t owned_entry;
@@ -103,4 +110,33 @@ void pause_menu_release(void)
 bool pause_menu_owned(void)
 {
   return owned_count != 0;
+}
+
+/* Read native pause state, without owning or modifying its counts. Fail closed:
+ * an absent/invalid table must not be interpreted as an active transition.
+ * The game can raise these only after the exit has begun, so this is a
+ * safety handoff rather than a replacement for a transition callback. */
+bool pause_transition_active(void)
+{
+  if (!z64hd_game || !z64hd_game->pause_mgr_ptr)
+    return false;
+  uintptr_t manager = sys_ptr(MAIN(z64hd_game->pause_mgr_ptr));
+  uint32_t n;
+  if (!manager || !sys_read32(manager, &n) || !n || n > PAUSE_TYPES_MAX)
+    return false;
+  uintptr_t table = sys_ptr(manager + 8);
+  if (!table || !sys_mapped(table, (size_t)n * PAUSE_TYPE_SIZE, SYS_PERM_R))
+    return false;
+  for (uint32_t i = 0; i < n; i++) {
+    uintptr_t entry = table + (uintptr_t)i * PAUSE_TYPE_SIZE;
+    uint32_t id, count;
+    if (!sys_read32(entry + PAUSE_TYPE_ID, &id) ||
+        !sys_read32(entry + PAUSE_TYPE_COUNT, &count))
+      return false;
+    if ((id == LOADING_PAUSE_ID || id == SCENE_TRANSITION_ID ||
+         id == EVENT_BANC_CHANGE_ID || id == SYSTEM_LOADING_PAUSE_ID) &&
+        (count & PAUSE_COUNT_MASK))
+      return true;
+  }
+  return false;
 }

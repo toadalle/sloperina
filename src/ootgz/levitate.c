@@ -35,6 +35,7 @@
 #include "gfx.h"
 #include "input.h"
 #include "link.h"
+#include "pause.h"
 #include "sys.h"
 #include "z64hd.h"
 
@@ -895,13 +896,13 @@ static bool search_running(void)
       search_failed();
     }
     if (search_state == SEARCH_FAILED)
-      floating = false;
+      drop();
     return true;
   }
   if (search_state == SEARCH_TESTING) {
     test_step();
     if (search_state == SEARCH_FAILED)
-      floating = false;
+      drop();
     return true;
   }
   return false;
@@ -979,6 +980,22 @@ static void frame(bool menu_open)
     hold_frames--;
   double dt = frame_seconds();
   protect_landing(menu_open);
+  /* The verified PauseManager provides a read-only sign that the game is
+   * transitioning. Stop writing Link's position immediately and restore
+   * collision ownership before old scene/controller objects are torn down.
+   * Never re-enter hover while these native requests are active. */
+  if (pause_transition_active()) {
+    if (floating) {
+      log_printf("levitate: native transition pause active, releasing hover");
+      drop();
+      gfx_notice("hover off: scene transition");
+    }
+    if (walking_through || phasing)
+      walls_stop();
+    speed_known = false;
+    walls_known = false;
+    return;
+  }
   handle_l3(menu_open);
   if (!menu_open && floating) {
     uint32_t speed_buttons = input_pressed() & (BTN_Y | BTN_A);
@@ -1016,6 +1033,9 @@ static void frame(bool menu_open)
   if (search_state == SEARCH_READY && !hold_frames && (!sys_mapped(record, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W) ||
       (!record_follows_link() && !(moving_link && frozen_frames)))) {
     log_printf("levitate: lost Link's record (new area?)");
+    /* Don't silently abandon a ghost CCT owner when the record goes stale:
+     * drop() revalidates writes and restores the controller when possible. */
+    drop();
     record = 0;
     search_state = SEARCH_IDLE;
     moving_link = false;

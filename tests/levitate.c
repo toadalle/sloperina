@@ -16,6 +16,8 @@ static bool controller_active, controller_available = true;
 static int controller_moves, controller_restores;
 static int velocity_resets, velocity_stops, distance_resets;
 static bool on_ground;
+static bool transition_active;
+bool pause_transition_active(void) { return transition_active; }
 bool cct_reset_vertical_velocity(uintptr_t a) { (void)a; velocity_resets++; return controller_available; }
 bool cct_stop_velocity(uintptr_t a) { (void)a; velocity_stops++; return controller_available; }
 bool cct_clear_fall_distance(uintptr_t a) { (void)a; distance_resets++; return controller_available; }
@@ -76,6 +78,7 @@ static void start(bool walls)
   velocity_resets = velocity_stops = distance_resets = 0;
   input_hide_from_game = input_hide_sticks_from_game = 0;
   on_ground = false;
+  transition_active = false;
   levitate_through_walls = walls;
   levitate_speed = 4;
   levitate_move_speed = 6;
@@ -256,6 +259,28 @@ static void test_walk_wall_shortcut(void)
   levitate_frame(false);
   assert(floating && levitate_move_speed == 6 && !cheats[CHEAT_WALLS]);
   puts("PASS: walking R+R3 toggles existing wall pass, hover resets speed, menu guard");
+}
+
+static void test_transition_handoff(void)
+{
+  start(true);
+  held = pressed = 0;
+  levitate_frame(false);
+  assert(controller_active && floating && moving_link);
+  transition_active = true;
+  int before = controller_moves;
+  levitate_frame(false);
+  assert(!floating && !moving_link && !controller_active);
+  assert(controller_restores == 1);
+  assert(controller_moves == before); /* no movement through loading state */
+  held = pressed = BTN_LSTICK;
+  levitate_frame(false);
+  assert(!floating); /* L3 cannot reactivate while transitioning */
+  transition_active = false;
+  held = pressed = BTN_LSTICK;
+  levitate_frame(false);
+  assert(floating); /* re-entry is possible after loading */
+  puts("PASS: scene transition releases ghost and suppresses hover position writes/re-entry");
 }
 
 static void test_flight_speed_buttons(void)
@@ -460,6 +485,7 @@ int main(void)
   test_vertical_controls();
   test_ghost_toggle();
   test_flight_speed_buttons();
+  test_transition_handoff();
   test_walk_wall_shortcut();
   test_controller_path();
   return 0;
