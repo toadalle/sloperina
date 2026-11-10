@@ -61,6 +61,23 @@ int main(void)
   filter_game_states(&sample, 1, 0, NPAD_NO1);
   assert(!sample.buttons);
 
+  const uint32_t shortcuts[] = {
+    PRACTICE_MENU_COMBO, MINI_HUD_COMBO, OVERLAY_TOGGLE_COMBO, OVERLAY_TOGGLE_ALT,
+    VOID_BYPASS_COMBO, SAVE_POSITION_COMBO, LOAD_POSITION_COMBO, HOVER_ACTION_COMBO,
+    TIMER_TOGGLE_COMBO, TIMER_PAUSE_COMBO, TIMER_RESET_COMBO, LAG_RESET_COMBO, JS_RESET_COMBO,
+  };
+  for (unsigned i = 0; i < sizeof(shortcuts) / sizeof(*shortcuts); i++) {
+    raw.buttons = 0;
+    input_update();
+    raw.buttons = shortcuts[i] | BTN_ZR;
+    input_update();
+    for (unsigned j = 0; j < sizeof(shortcuts) / sizeof(*shortcuts); j++)
+      assert(input_shortcut(shortcuts[j]) == (i == j));
+    sample = raw;
+    filter_game_states(&sample, 1, 0, NPAD_NO1);
+    assert(sample.buttons == BTN_ZR);
+  }
+
   input_set_menu_block(true);
   raw.sampling_number++;
   raw.buttons = BTN_B | BTN_LS_RIGHT | BTN_RS_UP;

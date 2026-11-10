@@ -31,18 +31,18 @@ Everything sloperinaGZ can do, menu by menu. New to it? Start with the [usage gu
 
 sloperinaGZ is a practice menu for **The Legend of Zelda: Ocarina of Time (Switch 2)**, versions 1.0.0 and 1.1.1, modelled
 on gz, the practice ROM for the N64 game. The game loads it itself, so it runs on a console (Atmosphère) and in
-emulators alike. Open the menu with **R + right stick down**.
+emulators alike. Open the menu with **D-pad right + Plus**.
 
 ### 1.1 Controls
 
 | Button | Does |
 |---|---|
-| **R + right stick down** | Open / close the menu |
+| **D-pad right + Plus** | Open / close the menu |
 | **D-pad up / down** | Move |
 | **D-pad left / right** | Change the value, or pick a button in a row |
-| **L** | Select / press |
+| **A** | Select / press |
 | **L held + D-pad left / right** | Numbers: change by 10 |
-| **R + D-pad left** | Back one menu (closes the menu at the top) |
+| **B** | Back one menu (closes the menu at the top) |
 
 While the menu is open the game doesn't see the controller.
 

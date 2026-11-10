@@ -130,7 +130,7 @@ static fa_event_t fa_read_button(void)
     return FA_NOTHING;
 
   bool run_combo_pressed = (pressed & button) || (pressed & BTN_LSTICK);
-  if ((held & button) && (held & BTN_LSTICK) && run_combo_pressed) {
+  if (!input_shortcut_held() && (held & button) && (held & BTN_LSTICK) && run_combo_pressed) {
     fa_not_a_tap = true;
     return FA_RUN;
   }
@@ -242,7 +242,7 @@ static void fa_hold_game(void)
     uint32_t held = input_held();
     uint32_t pressed = input_pressed();
     uint32_t button = fa_button_bit();
-    if ((held & button) && (held & BTN_LSTICK) && (pressed & (button | BTN_LSTICK))) {
+    if (!input_shortcut_held() && (held & button) && (held & BTN_LSTICK) && (pressed & (button | BTN_LSTICK))) {
       if (menu_current)
         menu_close();
       fa_button_down = false;

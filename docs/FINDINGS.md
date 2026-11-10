@@ -916,3 +916,18 @@ ready byte `+0x37C` and earlier gate scalar `+0x510`, plus the selector's
 other player-side inputs. The scalar at `+0x510` is separate from the
 virtual call's return. The runtime trace does not yet capture that call
 or identify its hit geometry.
+
+A later adult Kakariko capture saw the contact word change from `0x1100000`
+to `0x1180000` at frame 20390. Link stayed near Y 128.706 and moved in XZ.
+The event appeared at frame 20392. The first nonzero type was 1, and
+query flags `0x8020e` leave query bit 18 clear. The resolved virtual calls
+at `main+0x277AE10` and `main+0x277AF00` read query-index-8 results from
+the query object's packed result cache. A vertical intersection at
+the last pre-event XZ hit baked `AirWall` at Y 127.019 and ordinary
+collision lower down. That intersection locates nearby geometry, while
+the recorded contact and selector inputs identify the bypass candidate.
+
+The v3 IPS patch adds a session switch for contact bit 19 at
+`main+0x82C610` on 1.1.1. It preserves the original branch when the
+switch is off, and preserves the selector's other mask bit and earlier
+branches when enabled. It leaves the physics geometry in place.

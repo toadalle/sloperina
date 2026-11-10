@@ -57,6 +57,15 @@ static bool same_map(const char *a, const char *b)
   return *a == *b;
 }
 
+bool collision_mesh_available(const char *map)
+{
+  if (map)
+    for (unsigned i = 0; i < sizeof(assets) / sizeof(*assets); i++)
+      if (same_map(map, assets[i].name))
+        return true;
+  return false;
+}
+
 static int compare_cell(const mesh_cell_t *cell, int x, int z)
 {
   return cell->x != x ? cell->x - x : cell->z - z;

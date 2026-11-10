@@ -1861,6 +1861,12 @@ static void text_air_wall_summary(menu_item_t *it, char *buf, int len)
   snprintf(buf, len, TF("count  %s"), summary);
 }
 
+static void text_mesh_status(menu_item_t *it, char *buf, int len)
+{
+  snprintf(buf, len, "%s", collision_mesh_available(gd_get_str(GD_STR_MAP)) ?
+           T("static mesh: bundled") : T("static mesh: unavailable for this map"));
+}
+
 static void text_nearest_death(menu_item_t *it, char *buf, int len)
 {
   airwall_nearest_death(buf, len);
@@ -1915,6 +1921,7 @@ static void build_scene(void)
                                       set_scene_volume, (intptr_t)&collision_mesh_shown);
   if (mesh)
     mesh->hint = "Green floors, blue walls, pink ceilings (bundled maps only)";
+  menu_add_text(&m_scene, text_mesh_status, 0);
   menu_add_text(&m_scene, text_air_wall_summary, 0);
   menu_add_text(&m_scene, text_nearest_death, 0);
   menu_add_text(&m_scene, text_last_fall, 0);

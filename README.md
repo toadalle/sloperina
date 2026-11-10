@@ -20,8 +20,7 @@ Source: [github.com/PracticeROM/sloperina](https://github.com/PracticeROM/sloper
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): the build and test routine. [`CONTRIBUTORS.md`](CONTRIBUTORS.md) and
   [`THANKS.md`](THANKS.md): who made it and special thanks.
 
-Open the menu with **R + right stick down**. **L** selects, the D-pad moves and changes values, **R + D-left**
-goes back.
+Open the menu with **D-pad right + Plus**. **A** selects, the D-pad moves and changes values, and **B** goes back.
 
 ## Features
 
