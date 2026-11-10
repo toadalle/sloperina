@@ -88,7 +88,7 @@ static bool field_get(field_t field, int32_t *value)
   switch (field.type) {
     case FT_INT:
       return gd_get_int(field.hash, value);
-    case FT_BOOL:
+    case FT_BOOA:
       if (!gd_get_bool(field.hash, &flag))
         return false;
       *value = flag;
@@ -109,7 +109,7 @@ static void field_set(field_t field, int32_t value)
     case FT_INT:
       gd_set_int(field.hash, value);
       break;
-    case FT_BOOL:
+    case FT_BOOA:
       gd_set_bool(field.hash, value != 0);
       break;
     case FT_ENUM:
@@ -378,7 +378,7 @@ static void build_link(void)
   menu_item_t *health = menu_add_number(&m_link, "health", get_health, set_health, max_health, fill_health, 0);
   if (health) {
     health->text = health_text;
-    health->hint = "d-left/right: change by a quarter heart   L: fill";
+    health->hint = "d-left/right: change by a quarter heart   A: fill";
   }
   menu_item_t *containers =
     menu_add_number(&m_link, "heart containers", get_containers, set_containers, max_containers, 0, 0);
@@ -390,13 +390,13 @@ static void build_link(void)
     age->hint = "takes effect when the map reloads (reload map, below)";
   menu_item_t *reload = menu_add_action(&m_link, "reload map", act_reload_map, 0);
   if (reload)
-    reload->hint = "L: reload this map at the age above";
+    reload->hint = "A: reload this map at the age above";
   menu_item_t *save = menu_add_action(&m_link, "save position (R + d-up)", act_save_position, 0);
   if (save)
-    save->hint = "L: remember where Link is and which way he faces";
+    save->hint = "A: remember where Link is and which way he faces";
   menu_item_t *load = menu_add_action(&m_link, "load position (R + d-down)", act_load_position, 0);
   if (load)
-    load->hint = "L: put Link back there (same map only)";
+    load->hint = "A: put Link back there (same map only)";
   menu_add_return(&m_link);
   /* what can only be read, under return after a blank line */
   add_blank_line(&m_link);
@@ -494,7 +494,7 @@ static void build_warps(void)
 
 /* --- cheats ------------------------------------------------------------------------------------ */
 
-static menu_t m_cheats;
+static menu_t m_cheats, m_levitate;
 
 static bool get_cheat(menu_item_t *it)
 {
@@ -508,13 +508,14 @@ static void set_cheat(menu_item_t *it, bool on)
 
 static void build_cheats(void)
 {
-  menu_init(&m_cheats, "cheats", CHEAT_COUNT + 3);
+  menu_init(&m_cheats, "cheats", CHEAT_COUNT + 4);
   menu_add_heading(&m_cheats, "infinite");
   for (int cheat = 0; cheat < CHEAT_COUNT; cheat++) {
     if (cheat == CHEAT_SPEED)
       menu_add_heading(&m_cheats, "player");
     menu_add_check(&m_cheats, cheat_names[cheat], get_cheat, set_cheat, cheat);
   }
+  menu_add_submenu(&m_cheats, "levitation & ghost", &m_levitate);
   menu_add_return(&m_cheats);
 }
 
@@ -878,6 +879,7 @@ static menu_item_t *add_flag(menu_t *menu, const flag_t *flag, uintptr_t refresh
 #define MAX_SKULLTULAS 100
 #define MAX_SMALL_KEYS 9
 
+static menu_t m_equips;
 static menu_t m_inventory, m_items, m_child_items, m_adult_items, m_universal, m_ammo, m_equipment, m_collection,
   m_capacity, m_magic, m_quest, m_songs, m_dungeon_items, m_dungeon[MAX_DUNGEONS];
 
@@ -1057,7 +1059,7 @@ static void build_collection(void)
   menu_init(&m_magic, "magic", 4);
   menu_item_t *magic = menu_add_number(&m_magic, "magic", get_magic, set_magic, max_magic, fill_magic, 0);
   if (magic)
-    magic->hint = "d-left/right: change   L: fill (set the meter first)";
+    magic->hint = "d-left/right: change   A: fill (set the meter first)";
   add_upgrade(&m_magic, upgrades[UPG_MAGIC].name, UPG_MAGIC);
   menu_add_return(&m_magic);
 }
@@ -1124,12 +1126,13 @@ static void build_dungeon_items(void)
 
 static void build_inventory(void)
 {
-  menu_init(&m_inventory, "inventory", 11);
+  menu_init(&m_inventory, "inventory", 12);
   menu_item_t *items = menu_add_submenu(&m_inventory, "items", &m_items);
   if (items)
     items->hint = "the game's L/R quick menus need 2+ items";
   menu_add_submenu(&m_inventory, "ammo", &m_ammo);
   menu_add_submenu(&m_inventory, "equipment items", &m_equipment);
+  menu_add_submenu(&m_inventory, "equipped", &m_equips);
   menu_add_submenu(&m_inventory, "collection", &m_collection);
   menu_add_submenu(&m_inventory, "quest items", &m_quest);
   menu_add_submenu(&m_inventory, "songs", &m_songs);
@@ -1153,8 +1156,6 @@ static void build_inventory(void)
 }
 
 /* --- equips ------------------------------------------------------------------------------------- */
-
-static menu_t m_equips;
 
 /* The game's item names as the inventory menus call them. */
 static const struct { const char *game, *shown; } worn_names[] = {
@@ -1278,7 +1279,7 @@ static void build_story(void)
                                          set_stage, i);
     if (quest) {
       quest->choice_text = stage_text;
-      quest->hint = "d-left/right or L: change stage (applies after a loading zone)";
+      quest->hint = "d-left/right or A: change stage (applies after a loading zone)";
     }
   }
   menu_add_return(&m_story);
@@ -1344,7 +1345,7 @@ static bool move_watches(menu_item_t *it)
   if (gfx_custom_y >= 0 &&
       (gfx_custom_y - watches_y > WATCHES_ROUNDING || watches_y - gfx_custom_y > WATCHES_ROUNDING))
     watches_y = gfx_custom_y;
-  if (input_pressed() & BTN_L) {
+  if (input_pressed() & BTN_A) {
     move_held = 0;
     gfx_logf("watches moved");
     return false;
@@ -1485,7 +1486,7 @@ static bool watch_cursor(menu_item_t *it, const char *line, int *start, int *len
       *start = COL_WRENCH;
       *len = 1;
       return true;
-    case PART_LABEL: {
+    case PART_LABEA: {
       char label[WATCH_LABEL_SIZE];
       watch_entry_display_label(&watch_list[it->data], label, sizeof(label));
       *start = COL_LABEL;
@@ -1572,7 +1573,7 @@ static void watch_press(menu_item_t *it, int part)
         gfx_logf("%s: not in memory right now", label);
       break;
     }
-    case PART_LABEL:
+    case PART_LABEA:
       osk_open("label", entry->label[0] ? entry->label : label, watch_renamed, index);
       break;
     case PART_UP:
@@ -1616,8 +1617,8 @@ static void watch_scroll(menu_item_t *it, int part)
   }
 }
 
-static const char *const watch_arrow_hints[] = { "L: scroll the list up (held: keeps going)",
-                                                 "L: scroll the list down (held: keeps going)" };
+static const char *const watch_arrow_hints[] = { "A: scroll the list up (held: keeps going)",
+                                                 "A: scroll the list down (held: keeps going)" };
 
 /* --- watches: adding them -------------------------------------------------------------------------- */
 
@@ -1649,8 +1650,8 @@ static int custom_type = MW_X32;
 enum { TOOL_KNOWN, TOOL_CUSTOM };
 #define COL_TOOL_CUSTOM 3  /* the +, after the folder (two cells) and a space */
 #define COL_TOOL_DIGITS 6  /* the address, after "F+ +  " */
-static const char *const tool_hints[] = { "known watches: the built-in ones (L: open)",
-                                          "custom watch: a memory address of your choosing (L: type it)" };
+static const char *const tool_hints[] = { "known watches: the built-in ones (A: open)",
+                                          "custom watch: a memory address of your choosing (A: type it)" };
 
 static void tools_text(menu_item_t *it, char *buf, int len)
 {
@@ -1689,7 +1690,7 @@ static bool custom_watch_edit(menu_item_t *it)
     /* the digit goes round, f <-> 0, without carrying into the next */
     uintptr_t digit = ((custom_addr >> shift & 0xF) + (uintptr_t)(dir + 16)) & 0xF;
     custom_addr = (custom_addr & ~((uintptr_t)0xF << shift)) | digit << shift;
-  } else if (input_pressed() & BTN_L) {
+  } else if (input_pressed() & BTN_A) {
     if (watch_add_memory(custom_addr, custom_type))
       gfx_logf("added watch %0*lx", CUSTOM_DIGITS, (unsigned long)custom_addr);
     else
@@ -1732,8 +1733,8 @@ static void add_watches_box_items(void)
   if (move) {
     move->edit = move_watches;
     move->edit_alone = true;
-    move->hint = "L: move the watches around the screen";
-    move->edit_hint = "watches: d-pad moves them   L: done";
+    move->hint = "A: move the watches around the screen";
+    move->edit_hint = "watches: d-pad moves them   A: done";
   }
 }
 
@@ -1763,7 +1764,7 @@ static void add_watch_rows(void)
     row->cursor = watch_cursor;
     row->press = watch_press;
     row->n_parts = row_parts(&watch_list[i], parts);
-    row->hint = "d-left/right: pick a button   L: press it";
+    row->hint = "d-left/right: pick a button   A: press it";
   }
 }
 
@@ -1779,7 +1780,7 @@ static void add_watch_tools(bool reselect, int part)
   tools->n_parts = 2;
   tools->part_hints = tool_hints;
   tools->edit = custom_watch_edit;
-  tools->edit_hint = "d-left/right: digit   d-up/down: change   L: add";
+  tools->edit_hint = "d-left/right: digit   d-up/down: change   A: add";
   if (reselect) {
     m_watches.selected = (int)(tools - m_watches.items);
     tools->part = part;
@@ -1801,7 +1802,7 @@ static void fill_watches(void)
   menu_add_heading(&m_watches, "JS Height");
   menu_item_t *reset_js = menu_add_action(&m_watches, "Reset JS Height", act_js_height_reset, 0);
   if (reset_js)
-    reset_js->hint = "L: set the threshold to maximum once (also R + A + d-right)";
+    reset_js->hint = "A: set the threshold to maximum once (also R + A + d-right)";
   menu_item_t *lock_js = menu_add_check(&m_watches, "Lock JS Height", get_js_height_lock, set_js_height_lock, 0);
   if (lock_js)
     lock_js->hint = "Keep maximum height each frame; off after restarting";
@@ -1834,7 +1835,7 @@ static void build_watches(void)
     menu_item_t *known = menu_add_action(&m_watch_add, watch_labels[w], act_watch_add, w);
     if (known) {
       known->text = watch_add_state;
-      known->hint = "L: add to the list";
+      known->hint = "A: add to the list";
     }
   }
   menu_add_return(&m_watch_add);
@@ -1893,7 +1894,7 @@ static void build_scene(void)
   menu_init(&m_scene, "scene", 4);
   menu_item_t *reload = menu_add_action(&m_scene, "reload map", act_reload_map, 0);
   if (reload)
-    reload->hint = "L: reload this map (at the age set in the link menu)";
+    reload->hint = "A: reload this map (at the age set in the link menu)";
   menu_add_submenu(&m_scene, "collision", &m_collision);
   menu_item_t *enemy_hp = menu_add_check(&m_scene, "enemy health", get_enemy_hp, set_enemy_hp, 0);
   if (enemy_hp) {
@@ -1921,7 +1922,7 @@ static void build_scene(void)
 
 /* --- settings --------------------------------------------------------------------------------- */
 
-static menu_t m_settings, m_input_display, m_levitate, m_frame_advance;
+static menu_t m_settings, m_input_display, m_frame_advance, m_about;
 
 /* menu settings */
 #define OPACITY_STEP 10 /* percent per choice */
@@ -1947,6 +1948,16 @@ static int get_opacity(menu_item_t *it)
 static void set_opacity(menu_item_t *it, int choice)
 {
   gfx_opacity = choice * OPACITY_STEP;
+}
+
+static bool get_menu_pause_world(menu_item_t *it)
+{
+  return menu_pause_world;
+}
+
+static void set_menu_pause_world(menu_item_t *it, bool on)
+{
+  menu_set_pause_world(on);
 }
 
 /* the languages are found on the SD card after the menus are built: the switch reads them each time */
@@ -2202,31 +2213,33 @@ static void build_levitate(void)
 
 static void build_settings(void)
 {
-  menu_init(&m_settings, "settings", 10);
-  menu_add_heading(&m_settings, "menu settings");
+  menu_init(&m_settings, "settings", 8);
+  menu_add_heading(&m_settings, "menu");
   menu_item_t *language = menu_add_option(&m_settings, "language", 1, lang_names(), get_lang, set_lang, 0);
   if (language)
     language->hint = "files in sd:/ootgz/lang (see lang/template.json)";
   menu_item_t *size = menu_add_option(&m_settings, "size", ARRAY_LEN(size_names), size_names, get_size, set_size, 0);
   if (size)
-    size->hint = "text size of the menu, watches and log (auto: for the screen)";
+    size->hint = "text size of the practice menu and overlays (auto: for the screen)";
   menu_item_t *opacity = menu_add_option(&m_settings, "background opacity", ARRAY_LEN(opacity_names), opacity_names,
                                          get_opacity, set_opacity, 0);
   if (opacity)
     opacity->hint = "below 100%: costs some speed, and what's behind lags 2 frames";
+  menu_item_t *pause_world = menu_add_check(&m_settings, "pause game while open", get_menu_pause_world,
+                                             set_menu_pause_world, 0);
+  if (pause_world) {
+    pause_world->hint = "default: stop world simulation; off keeps the game live for inspection";
+    pause_world->log_label = "menu world pause";
+  }
   menu_end_group(&m_settings);
-  menu_add_heading(&m_settings, "other settings");
-  menu_add_submenu(&m_settings, "input display", &m_input_display);
-  menu_add_submenu(&m_settings, "levitate", &m_levitate);
-  menu_add_submenu(&m_settings, "frame advance", &m_frame_advance);
-  menu_end_group(&m_settings);
+  menu_add_submenu(&m_settings, "about", &m_about);
   menu_add_return(&m_settings);
 
+  /* Built here because their settings are persisted; linked from functional categories below. */
   build_frame_advance();
   build_input_display();
   build_levitate();
 }
-
 /* --- debug (gz's debug menu) ----------------------------------------------------------------------- */
 
 static menu_t m_debug;
@@ -2429,7 +2442,7 @@ static void build_debug(void)
   menu_init(&m_heap, "heap", 7);
   menu_item_t *view = menu_add_action(&m_heap, "view the heap in memory", act_heap_memory, 0);
   if (view)
-    view->hint = "L: debug > memory at the start of the heap";
+    view->hint = "A: debug > memory at the start of the heap";
   menu_add_return(&m_heap);
   add_blank_line(&m_heap);
   for (int line = 0; line < N_HEAP_LINES; line++)
@@ -2581,8 +2594,8 @@ static void log_scroll(menu_item_t *it, int part)
   log_top = clamp_int(log_top + (part ? 1 : -1), 0, max);
 }
 
-static const char *const log_arrow_hints[] = { "L: scroll to newer (held: keeps going)",
-                                               "L: scroll to older (held: keeps going)" };
+static const char *const log_arrow_hints[] = { "A: scroll to newer (held: keeps going)",
+                                               "A: scroll to older (held: keeps going)" };
 
 /* it->data: the row */
 static void text_log(menu_item_t *it, char *buf, int len)
@@ -2615,8 +2628,6 @@ static void build_log(void)
 
 /* --- about, splash, root ------------------------------------------------------------------------- */
 
-static menu_t m_about;
-
 #define SPLASH_FRAMES 240 /* about 8 seconds, as gz's */
 
 /* gz's start-up splash (bottom right): name and version, the build date under it, the website, how to
@@ -2626,7 +2637,7 @@ void menus_splash(void)
   static char title[64], date[64];
   snprintf(title, sizeof(title), "sloperinaGZ - %s", BUILD_VERSION);
   snprintf(date, sizeof(date), TF("Build Date: %s"), BUILD_WHEN);
-  const char *lines[] = { title, date, "practicerom.com/oothd", 0, T("R + right stick down: open the menu") };
+  const char *lines[] = { title, date, "practicerom.com/oothd", 0, T("R + Plus: open the menu") };
   static const uint8_t styles[] = { GFX_DIM, GFX_DIM, GFX_LOG, GFX_LOG, GFX_NORMAL };
   static const uint8_t indents[] = { 0, 0, 0, 0, 0 };
   gfx_splash(lines, styles, indents, ARRAY_LEN(lines), SPLASH_FRAMES);
@@ -2650,24 +2661,32 @@ static void build_about(void)
   menu_add_return(&m_about);
 }
 
-static void build_root(void)
+static menu_t m_debug_tools;
+
+static void build_debug_tools(void)
 {
-  menu_init(&menu_root, "sloperinaGZ", 14);
-  menu_add_submenu(&menu_root, "link", &m_link);
-  menu_add_submenu(&menu_root, "warps", &m_warps);
-  menu_add_submenu(&menu_root, "scene", &m_scene);
-  menu_add_submenu(&menu_root, "cheats", &m_cheats);
-  menu_add_submenu(&menu_root, "inventory", &m_inventory);
-  menu_add_submenu(&menu_root, "equips", &m_equips);
-  menu_add_submenu(&menu_root, "story", &m_story);
-  menu_add_submenu(&menu_root, "watches", &m_watches);
-  menu_add_submenu(&menu_root, "debug", &m_debug);
-  menu_add_submenu(&menu_root, "settings", &m_settings);
-  menu_add_submenu(&menu_root, "log", &m_log);
-  menu_add_submenu(&menu_root, "about", &m_about);
-  menu_add(&menu_root, MI_BACK, "close");
+  menu_init(&m_debug_tools, "debug tools", 6);
+  menu_add_submenu(&m_debug_tools, "watches", &m_watches);
+  menu_add_submenu(&m_debug_tools, "input monitor", &m_input_display);
+  menu_add_submenu(&m_debug_tools, "frame advance", &m_frame_advance);
+  menu_add_submenu(&m_debug_tools, "diagnostics", &m_debug);
+  menu_add_submenu(&m_debug_tools, "logs", &m_log);
+  menu_add_return(&m_debug_tools);
 }
 
+static void build_root(void)
+{
+  menu_init(&menu_root, "sloperinaGZ", 10);
+  menu_add_submenu(&menu_root, "link", &m_link);
+  menu_add_submenu(&menu_root, "cheats", &m_cheats);
+  menu_add_submenu(&menu_root, "scene", &m_scene);
+  menu_add_submenu(&menu_root, "warps", &m_warps);
+  menu_add_submenu(&menu_root, "inventory", &m_inventory);
+  menu_add_submenu(&menu_root, "story", &m_story);
+  menu_add_submenu(&menu_root, "debug tools", &m_debug_tools);
+  menu_add_submenu(&menu_root, "settings", &m_settings);
+  menu_add(&menu_root, MI_BACK, "close");
+}
 /* the order matters: menu_init reserves each menu's items from one shared pool */
 void menus_build(void)
 {
@@ -2684,5 +2703,6 @@ void menus_build(void)
   osk_build();
   build_log();
   build_about();
+  build_debug_tools();
   build_root();
 }

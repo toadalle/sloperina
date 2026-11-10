@@ -25,6 +25,7 @@
 #include "sdfs.h"
 #include "lang.h"
 #include "menus.h"
+#include "menu.h"
 
 
 #define MOUNT SD_MOUNT
@@ -66,6 +67,7 @@ typedef struct {
   int32_t pause_display;
   int32_t frame_advance_button;
   int32_t menu_scale;
+  int32_t menu_pause_world;
   int32_t input_display;
   int32_t input_display_bg;
   int32_t input_parts; /* INPUT_PART_* */
@@ -122,6 +124,7 @@ static snapshot_t take_snapshot(void)
   s.watch_y = watches_y;
   s.opacity = gfx_opacity;
   s.menu_scale = gfx_menu_scale;
+  s.menu_pause_world = menu_pause_world;
   s.frame_advance = frame_advance;
   s.pause_display = pause_display;
   s.frame_advance_button = frame_advance_button;
@@ -190,6 +193,7 @@ static void apply_snapshot(const snapshot_t *s)
 
   if (s->menu_scale >= 0 && s->menu_scale <= MENU_SCALE_MAX)
     gfx_menu_scale = s->menu_scale;
+  menu_set_pause_world(s->menu_pause_world != 0);
   if (s->opacity >= 0 && s->opacity <= OPACITY_MAX)
     gfx_opacity = s->opacity / 10 * 10;
   warp_arrival_cutscenes = s->arrival_cutscenes != 0;
@@ -256,6 +260,7 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("watch_y", watch_y),
   INT_KEY("opacity", opacity),
   INT_KEY("menu_size", menu_scale),
+  INT_KEY("menu_pause_world", menu_pause_world),
   INT_KEY("frame_advance", frame_advance),
   INT_KEY("pause_display", pause_display),
   INT_KEY("frame_advance_button", frame_advance_button),
@@ -445,10 +450,11 @@ static void save_settings_file(const snapshot_t *s)
   if (n < (int)sizeof(buf))
     n += snprintf(buf + n, sizeof(buf) - n,
                   "language=%s\nframe_advance=%d\nframe_advance_button=%d\npause_display=%d\nmenu_size=%d\n"
-                  "input_display=%d\ninput_display_background=%d\ninput_display_parts=%d\n"
+                  "menu_pause_world=%d\ninput_display=%d\ninput_display_background=%d\ninput_display_parts=%d\n"
                   "input_display_style=%d\ninput_display_size=%d\n",
                   s->lang, (int)s->frame_advance, (int)s->frame_advance_button, (int)s->pause_display,
-                  (int)s->menu_scale, (int)s->input_display, (int)s->input_display_bg, (int)s->input_parts,
+                  (int)s->menu_scale, (int)s->menu_pause_world, (int)s->input_display, (int)s->input_display_bg,
+                  (int)s->input_parts,
                   (int)s->input_style, (int)s->input_size);
   for (int w = 0; w < W_COUNT && n < (int)sizeof(buf); w++)
     if (s->watch_labels[w][0])
