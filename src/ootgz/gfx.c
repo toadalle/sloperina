@@ -371,6 +371,8 @@ static void measure_panel(gfx_panel_t *panel)
   panel->hash = hash ? hash : 1;
 }
 
+bool gfx_overlays_hidden;
+
 void gfx_frame(void)
 {
   int next = published_index == 0 ? 1 : 0;
@@ -395,6 +397,11 @@ void gfx_frame(void)
   measure_panel(&screen->panel[GFX_PANEL_INPUT]);
   memset(&input_panel, 0, sizeof(input_panel));
 
+  if (gfx_overlays_hidden) {
+    screen->panel[PANEL_HUD].rows = 0;
+    screen->panel[GFX_PANEL_INPUT].rows = 0;
+    screen->panel[GFX_PANEL_LOG].rows = 0;
+  }
   bool anything = screen->panel[PANEL_MENU].rows || screen->panel[PANEL_HUD].rows ||
                   screen->panel[GFX_PANEL_LOG].rows || screen->panel[GFX_PANEL_INPUT].rows;
   __atomic_store_n(&published_index, anything ? next : -1, __ATOMIC_RELEASE);

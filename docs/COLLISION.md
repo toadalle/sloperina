@@ -1,22 +1,23 @@
 # Collision view
 
-**Scene > Collision > Show Static Collision Mesh** draws baked player collision
+**Show Static Collision Mesh** under **Scene > Collision** draws baked player collision
 near Link. Green edges mark floors, blue edges mark walls and pink edges mark
 ceilings. Placed loading zones and invisible barrier shapes retain their
 separate overlay toggles. The orange cross marks a recorded fall position.
 
 The mesh files in the test build cover the village and forest playable areas
-in both ages, Dodongo's Cavern, Forest Temple and Inside the Deku Tree. Copy
-the artifact's `sd/sloperinaGZ/mesh` directory to `sloperinaGZ/mesh` on the
-game's virtual SD card. The release installers also copy it. The runtime
-loads simplified, deduplicated edges from the current and neighboring 8 m
-cells. The mesh uses a fixed draw budget with placed overlays drawn first.
-It shows through scenery and currently represents static geometry only.
+in both ages, Dodongo's Cavern, Forest Temple and Inside the Deku Tree.
+The module embeds the indexes and reads edges from the current and neighboring
+8 m cells in memory. The renderer gives placed outlines and nearby mesh edges
+separate portions of its fixed draw budget. The mesh shows through scenery
+and represents static geometry. Cyan edges under Include Baked Boundary Walls
+come from collision tagged AirWall in the static tiles. Lavender outlines
+represent special-purpose placed actors.
 
 Run `python tools/collision_mesh.py <Area> <Map>` with `OOTMENU_NUP` set to
 generate another map. Use `--bounds X0 Z0 X1 Z1` to limit the export to the
-playable area on large maps. This produces the SGM1 edge file read by
-`src/ootgz/collision_mesh.c`. The development notes below describe the original
+playable area on large maps. Register the new SGM1 file in `mesh_assets.S`
+and the asset table in `collision_mesh.c` when building the module. The development notes below describe the original
 plan and the underlying collision decoder.
 
 ## Contents

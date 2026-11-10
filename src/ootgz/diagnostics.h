@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include "link.h"
 
+bool void_bypass_available(void);
+bool void_bypass_enabled(void);
+void void_bypass_set(bool enabled);
+
 void diagnostics_dump(bool deep);
 bool diagnostics_transition_frame(bool active); /* true when a breadcrumb should be flushed */
 bool diagnostics_fall_frame(void);

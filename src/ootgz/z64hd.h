@@ -20,6 +20,7 @@ struct z64hd_build {
   uint32_t cave_end;
   uint32_t hook_slot;
   uint32_t frame_site;
+  uint32_t void_contact_site, void_contact_accept; /* generic contact path only */
   uint32_t gd_unlock;
   uint32_t gd_mgr_ptr;
   uint32_t gd_getint;

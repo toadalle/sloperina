@@ -271,7 +271,7 @@ static const float DEGREES_PER_RADIAN = 57.29577951f;
 
 #define LAG_TICK_HZ 60
 
-static bool timer_running;
+static bool timer_running, timer_active;
 static uint64_t timer_total, timer_since; /* sys_tick()s */
 static uint64_t lag_start_tick;
 static uint32_t lag_start_frame;
@@ -282,8 +282,23 @@ void timer_toggle(void)
   uint64_t now = sys_tick();
   if (timer_running)
     timer_total += now - timer_since;
+  if (!timer_active)
+    timer_total = 0;
+  timer_active = !timer_active;
+  timer_running = timer_active;
+  timer_since = now;
+}
+
+bool timer_pause_toggle(void)
+{
+  if (!timer_active)
+    return false;
+  uint64_t now = sys_tick();
+  if (timer_running)
+    timer_total += now - timer_since;
   timer_running = !timer_running;
   timer_since = now;
+  return true;
 }
 
 void timer_reset(void)
@@ -826,6 +841,10 @@ static void command_input(void)
     case TIMER_TOGGLE_COMBO:
       timer_toggle();
       gfx_notice("timer started/stopped");
+      break;
+    case TIMER_PAUSE_COMBO:
+      if (timer_pause_toggle())
+        gfx_notice(timer_running ? "timer resumed" : "timer paused");
       break;
     case TIMER_RESET_COMBO:
       timer_reset();

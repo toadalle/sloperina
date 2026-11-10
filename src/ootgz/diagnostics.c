@@ -562,6 +562,7 @@ void diagnostics_dump(bool deep)
   vec3f_t pose[2];
   uintptr_t cam = sample_link_and_camera(pose);
   sample_controller();
+  append("Contact void-out bypass available=%d enabled=%d\n", void_bypass_available(), void_bypass_enabled());
   char overlay[128];
   airwall_summary(overlay, sizeof(overlay));
   append("Placed overlays: %s\n", overlay);

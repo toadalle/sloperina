@@ -10,13 +10,13 @@ import phive
 
 CELL = 8
 PER_CELL = 96
-KINDS = {"floor": 0, "wall": 1, "ceiling": 2}
+KINDS = {"floor": 0, "wall": 1, "ceiling": 2, "barrier": 3}
 
 
 def add_triangles(cells, triangles, bounds):
     for tri in triangles:
         a, b, c, attrs = tri
-        if not attrs["hitsPlayer"] or attrs["material"] == "AirWall":
+        if not attrs["hitsPlayer"]:
             continue
         if bounds:
             x0, z0, x1, z1 = bounds
@@ -26,7 +26,9 @@ def add_triangles(cells, triangles, bounds):
         if kind is None:
             continue
         # Cluster the dense source mesh while retaining a shared grid across tile seams.
-        step = (16, 8, 16) if kind == 0 else (8, 8, 8)
+        if attrs["material"] == "AirWall":
+            kind = KINDS["barrier"]
+        step = (16, 8, 16) if kind == 0 else (2, 2, 2) if kind == 3 else (8, 8, 8)
         verts = [tuple(round(v * 16 / s) * s for v, s in zip(point, step)) for point in (a, b, c)]
         if any(not -32768 <= v <= 32767 for point in verts for v in point):
             continue

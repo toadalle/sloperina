@@ -31,12 +31,12 @@ int main(void)
   npad_state_t sample = raw;
   filter_game_states(&sample, 1, 0, NPAD_NO1);
   assert(!sample.buttons && input_shortcut(PRACTICE_MENU_COMBO));
-  raw.buttons = BTN_A;
+  raw.buttons = BTN_PLUS;
   input_update();
   assert(!input_shortcut(PRACTICE_MENU_COMBO));
   raw.buttons = PRACTICE_MENU_COMBO | BTN_ZR;
   input_update();
-  assert(input_shortcut(PRACTICE_MENU_COMBO)); /* D-pad completes a held A */
+  assert(input_shortcut(PRACTICE_MENU_COMBO)); /* D-pad completes a held Plus */
   sample = raw;
   filter_game_states(&sample, 1, 0, NPAD_NO1);
   assert(sample.buttons == BTN_ZR);

@@ -113,6 +113,7 @@ extern volatile int gfx_pause_icon;
 /* Game-thread capture request and render-thread acknowledgments, matched by token. */
 extern uint32_t gfx_freeze_request, gfx_freeze_ready, gfx_freeze_failed;
 extern volatile uint32_t gfx_presents; /* frames the game has presented (nvn.c) */
+extern bool gfx_overlays_hidden;
 void gfx_frame(void);            /* publish; once per frame after everything has drawn */
 
 /* render thread: the latest published screen, or NULL when there's nothing to show */

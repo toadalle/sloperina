@@ -18,7 +18,7 @@ A quick guide to get you practising. For every option in every menu, see the [ma
    sloperinaGZ works with **The Legend of Zelda: Ocarina of Time (Switch 2), versions 1.0.0 and 1.1.1**.
 2. **Start the game.** For a few seconds the bottom-right corner shows sloperinaGZ's name, version and
    build date, the website, and how to open the menu. That means it's running.
-3. **Open the menu:** press **D-pad right + A**. Press the chord again to close it.
+3. **Open the menu:** press **D-pad right + Plus**. Press the chord again to close it.
 
 The menu freezes the game over a captured backdrop by default on supported
 builds. Turn off **Settings > Freeze game while open** for live inspection.
@@ -30,7 +30,7 @@ Navigate with the D-pad or left stick. **A** selects and **B** goes back.
 
 | Button | In the menu |
 |---|---|
-| **D-pad right + A** | Open or close the menu |
+| **D-pad right + Plus** | Open or close the menu |
 | **D-pad left + B** | Toggle the mini-HUD during gameplay |
 | **D-pad up / down** | Move up and down the list |
 | **D-pad left / right** | Change a value (switches, numbers), or pick a button on a row of buttons |
@@ -57,13 +57,16 @@ These work with the menu closed.
 
 | Shortcut | What it does |
 |---|---|
-| **D-pad right + A** | Open the menu |
+| **D-pad right + Plus** | Open the menu |
 | **D-pad left + B** | Toggle the mini-HUD |
-| **D-pad right + B** | Start or stop the timer |
-| **D-pad right + Minus** | Reset the timer |
-| **D-pad right + Plus** | Reset the lag counter |
+| **D-pad right + A** | Start a new timer run or stop the current run |
+| **D-pad right + B** | Pause or resume the current timer run |
+| **D-pad right + Minus / X** | Hide or restore practice overlays |
+| **D-pad right + Y** | Toggle the experimental contact void-out bypass (1.1.1) |
+| **D-pad left + Minus** | Reset the timer |
+| **D-pad left + Plus** | Reset the lag counter |
 | **D-pad right + ZL** | Reset JS Height |
-| **D-pad right + X / Y** | Save / load position |
+| **D-pad left + X / Y** | Save / load position |
 | **D-pad right + R3** | Reset flight speed in hover, or toggle walking wall-pass |
 | **L3** | Levitate: start floating / drop (when it's turned on in settings) |
 | **X / B** (held, while floating) | Levitate up / down; release to hover |
@@ -147,7 +150,7 @@ the SD card in `sloperinaGZ/settings.ini`, plain text you can edit. Your game sa
 
 ## Something's not right
 
-- **Nothing happens when I press R + right stick down.** Check the sloperinaGZ splash showed at start-up. If not,
+- **Nothing happens when I press D-pad right + Plus.** Check the sloperinaGZ splash showed at start-up. If not,
   sloperinaGZ needs the module and the IPS for the active game build. See [INSTALLATION.md](../INSTALLATION.md).
 - **The game doesn't react to a button.** Frame advance takes **L** (or **D-pad right**) away from the game while it's on,
   levitate takes **L3**, plus **X/B/R3** while floating. Turn them off in **settings** if you need those buttons.

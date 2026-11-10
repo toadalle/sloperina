@@ -23,7 +23,7 @@ float sinf(float x); /* from sdk */
 float cosf(float x);
 float sqrtf(float x);
 
-bool airwalls_shown, airwalls_all;
+bool airwalls_shown, airwalls_all, baked_barriers_shown = true;
 bool loading_zones_shown, void_zones_shown;
 
 #define AW_RANGE 60.0f
@@ -568,31 +568,27 @@ static void add_world_cross(aw_dot_t *out, int *n, const view_cam_t *cam, const 
   }
 }
 
-static void draw_collision_mesh(aw_dot_t *out, int *n, const view_cam_t *cam)
+static void draw_collision_mesh(aw_dot_t *out, int *n, const view_cam_t *cam, vec3f_t link,
+                                const mesh_edge_t *mesh, unsigned count, bool baked, int budget)
 {
-  vec3f_t link;
-  if (!link_drawn_pos(&link))
-    return;
-  unsigned count;
-  const mesh_edge_t *mesh = collision_mesh_near(current_map_name, link, &count);
-  int limit = *n + 360;
+  int limit = *n + budget;
   if (limit > MAX_DOTS)
     limit = MAX_DOTS;
   for (unsigned i = 0; i < count && *n + 4 <= limit; i++) {
     const mesh_edge_t *edge = &mesh[i];
-    if (edge->kind > 2)
+    if (edge->kind > 3 || (edge->kind == 3) != baked)
       continue;
     float a[3], b[3], va[3], vb[3];
     for (int axis = 0; axis < 3; axis++) {
       a[axis] = edge->a[axis] / 16.0f;
       b[axis] = edge->b[axis] / 16.0f;
     }
-    float dy = (a[1] + b[1]) * .5f - link.y;
-    if (dy < -12 || dy > 12)
+    if ((a[1] < link.y - 12 && b[1] < link.y - 12) ||
+        (a[1] > link.y + 12 && b[1] > link.y + 12))
       continue;
     view_point(cam, a, va);
     view_point(cam, b, vb);
-    add_edge_dots(out, n, cam, va, vb, AW_MESH_FLOOR + edge->kind, 4);
+    add_edge_dots(out, n, cam, va, vb, AW_MESH_FLOOR + edge->kind, 6);
   }
 }
 
@@ -605,7 +601,8 @@ void airwall_frame(bool menu_open)
   bool enabled = airwalls_shown || loading_zones_shown || void_zones_shown;
   vec3f_t fall;
   bool show_fall = void_zones_shown && diagnostics_last_fall(current_map_name, &fall);
-  bool draw = ((enabled && (n_walls || show_fall)) || collision_mesh_shown) &&
+  bool draw_baked = airwalls_shown && baked_barriers_shown;
+  bool draw = ((enabled && (n_walls || show_fall)) || collision_mesh_shown || draw_baked) &&
               !menu_open && !game_is_paused();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
@@ -614,8 +611,14 @@ void airwall_frame(bool menu_open)
       add_world_cross(dots[next], &n, &cam, point, AW_FALL_SAMPLE, 9);
     }
     /* nearest wall first, so the dot budget goes to what's close */
+    vec3f_t link = {0};
+    unsigned mesh_count = 0;
+    const mesh_edge_t *mesh = 0;
+    if ((collision_mesh_shown || draw_baked) && link_drawn_pos(&link))
+      mesh = collision_mesh_near(current_map_name, link, &mesh_count);
+    int volume_limit = mesh_count ? MAX_DOTS - 280 : MAX_DOTS;
     int n_walls_near = sort_near_walls(&cam);
-    for (int k = 0; k < n_walls_near && n < MAX_DOTS; k++) {
+    for (int k = 0; k < n_walls_near && n < volume_limit; k++) {
       int i = near_order[k];
       const airwall_t *wall = map_wall(i);
       static const uint8_t colors[] = {
@@ -629,7 +632,7 @@ void airwall_frame(bool menu_open)
         add_world_cross(dots[next], &n, &cam, geo->centre, color, 5);
       /* Reduce detail under pressure instead of dropping the whole outline.
        * No nearby volume can spend more than one fifth of the frame budget. */
-      int budget = MAX_DOTS - n;
+      int budget = volume_limit - n;
       if (budget > MAX_DOTS / 5)
         budget = MAX_DOTS / 5;
       if (!geo->n_edges || budget < geo->n_edges)
@@ -642,8 +645,10 @@ void airwall_frame(bool menu_open)
       for (int e = geo->first_edge; n < MAX_DOTS && e < geo->first_edge + geo->n_edges; e++)
         add_edge_dots(dots[next], &n, &cam, camera_points[edges[e][0]], camera_points[edges[e][1]], color, limit);
     }
-    if (collision_mesh_shown)
-      draw_collision_mesh(dots[next], &n, &cam);
+    if (mesh_count && draw_baked)
+      draw_collision_mesh(dots[next], &n, &cam, link, mesh, mesh_count, true, collision_mesh_shown ? 140 : 280);
+    if (mesh_count && collision_mesh_shown)
+      draw_collision_mesh(dots[next], &n, &cam, link, mesh, mesh_count, false, 280);
   }
   n_dots[next] = n;
   __atomic_store_n(&published, n ? next : -1, __ATOMIC_RELEASE);

@@ -393,10 +393,10 @@ static void build_link(void)
   menu_item_t *reload = menu_add_action(&m_link, "reload map", act_reload_map, 0);
   if (reload)
     reload->hint = "A: reload this map at the age above";
-  menu_item_t *save = menu_add_action(&m_link, "save position (D-right + X)", act_save_position, 0);
+  menu_item_t *save = menu_add_action(&m_link, "save position (D-left + X)", act_save_position, 0);
   if (save)
     save->hint = "A: remember where Link is and which way he faces";
-  menu_item_t *load = menu_add_action(&m_link, "load position (D-right + Y)", act_load_position, 0);
+  menu_item_t *load = menu_add_action(&m_link, "load position (D-left + Y)", act_load_position, 0);
   if (load)
     load->hint = "A: put Link back there (same map only)";
   /* read-only status after a blank line */
@@ -504,14 +504,16 @@ static void set_cheat(menu_item_t *it, bool on)
 
 static void build_cheats(void)
 {
-  menu_init(&m_cheats, "cheats", CHEAT_COUNT + 4);
-  menu_add_heading(&m_cheats, "infinite");
-  for (int cheat = 0; cheat < CHEAT_COUNT; cheat++) {
-    if (cheat == CHEAT_SPEED)
-      menu_add_heading(&m_cheats, "player");
-    menu_add_check(&m_cheats, cheat_names[cheat], get_cheat, set_cheat, cheat);
-  }
+  static menu_t resources, movement;
+  menu_init(&m_cheats, "cheats", 3);
+  menu_init(&resources, "infinite resources", CHEAT_SPEED);
+  menu_init(&movement, "movement", CHEAT_COUNT - CHEAT_SPEED);
+  menu_add_submenu(&m_cheats, "infinite resources", &resources);
+  menu_add_submenu(&m_cheats, "movement", &movement);
   menu_add_submenu(&m_cheats, "levitation & ghost", &m_levitate);
+  for (int cheat = 0; cheat < CHEAT_COUNT; cheat++)
+    menu_add_check(cheat < CHEAT_SPEED ? &resources : &movement,
+                   cheat_names[cheat], get_cheat, set_cheat, cheat);
 }
 
 /* --- inventory: owned items and gear ------------------------------------------------------------- */
@@ -1820,7 +1822,7 @@ static void build_watches(void)
 
 /* --- scene ------------------------------------------------------------------------------------ */
 
-static menu_t m_scene, m_collision;
+static menu_t m_scene;
 
 static bool get_air_walls_shown(menu_item_t *it)
 {
@@ -1885,50 +1887,55 @@ static void set_scene_volume(menu_item_t *it, bool on) { *(bool *)it->data = on;
 
 static void build_scene(void)
 {
-  menu_init(&m_scene, "scene", 4);
-  menu_item_t *reload = menu_add_action(&m_scene, "reload map", act_reload_map, 0);
-  if (reload)
-    reload->hint = "A: reload this map (at the age set in the link menu)";
-  menu_add_submenu(&m_scene, "collision", &m_collision);
+  menu_init(&m_scene, "scene", 16);
+  menu_add_heading(&m_scene, "collision");
+  menu_item_t *loading = menu_add_check(&m_scene, "show loading zones", get_scene_volume,
+                                        set_scene_volume, (intptr_t)&loading_zones_shown);
+  menu_item_t *abyss = menu_add_check(&m_scene, "show void zones", get_scene_volume,
+                                       set_scene_volume, (intptr_t)&void_zones_shown);
+  if (loading)
+    loading->hint = "Yellow: map and grotto entrance triggers. Cross marks the center";
+  if (abyss)
+    abyss->hint = "Red: placed void triggers. Violet: grotto safety. Orange cross: last fall sample";
+  menu_item_t *show = menu_add_check(&m_scene, "show invisible barriers", get_air_walls_shown, set_air_walls_shown, 0);
+  if (show) {
+    show->hint = "Blue: invisible walls that block Link";
+    show->log_label = "air walls:";
+  }
+  menu_item_t *all_kinds = menu_add_check(&m_scene, "include special-purpose air walls", get_air_walls_all, set_air_walls_all, 0);
+  if (all_kinds) {
+    all_kinds->hint = "Lavender: character, animal, camera and other special-purpose walls";
+    all_kinds->log_label = "all kinds:";
+  }
+  menu_item_t *baked = menu_add_check(&m_scene, "include baked boundary walls", get_scene_volume,
+                                      set_scene_volume, (intptr_t)&baked_barriers_shown);
+  if (baked)
+    baked->hint = "Cyan: invisible boundary geometry baked into the map";
+  menu_item_t *mesh = menu_add_check(&m_scene, "show static collision mesh", get_scene_volume,
+                                      set_scene_volume, (intptr_t)&collision_mesh_shown);
+  if (mesh)
+    mesh->hint = "Green floors, blue walls, pink ceilings (bundled maps only)";
+  menu_add_text(&m_scene, text_air_wall_summary, 0);
+  menu_add_text(&m_scene, text_nearest_death, 0);
+  menu_add_text(&m_scene, text_last_fall, 0);
+  menu_add_text(&m_scene, text_air_wall_link, 0);
+  menu_add_heading(&m_scene, "actors");
   menu_item_t *enemy_hp = menu_add_check(&m_scene, "enemy health", get_enemy_hp, set_enemy_hp, 0);
   if (enemy_hp) {
     enemy_hp->hint = "a bar and life/max over each enemy";
     enemy_hp->log_label = "enemy health:";
   }
 
-  menu_init(&m_collision, "collision", 10);
-  menu_add_heading(&m_collision, "scene overlays");
-  menu_item_t *loading = menu_add_check(&m_collision, "show loading zones", get_scene_volume,
-                                        set_scene_volume, (intptr_t)&loading_zones_shown);
-  menu_item_t *abyss = menu_add_check(&m_collision, "show void zones", get_scene_volume,
-                                       set_scene_volume, (intptr_t)&void_zones_shown);
-  if (loading)
-    loading->hint = "Yellow: map and grotto entrance triggers. Cross marks the center";
-  if (abyss)
-    abyss->hint = "Red: placed void triggers. Violet: grotto safety. Orange cross: last fall sample";
-  menu_item_t *show = menu_add_check(&m_collision, "show invisible barriers", get_air_walls_shown, set_air_walls_shown, 0);
-  if (show) {
-    show->hint = "Blue: invisible walls that block Link";
-    show->log_label = "air walls:";
-  }
-  menu_item_t *all_kinds = menu_add_check(&m_collision, "include special-purpose air walls", get_air_walls_all, set_air_walls_all, 0);
-  if (all_kinds) {
-    all_kinds->hint = "Pale cyan: character, animal, camera and other special-purpose walls";
-    all_kinds->log_label = "all kinds:";
-  }
-  menu_item_t *mesh = menu_add_check(&m_collision, "show static collision mesh", get_scene_volume,
-                                      set_scene_volume, (intptr_t)&collision_mesh_shown);
-  if (mesh)
-    mesh->hint = "Green floors, blue walls, pink ceilings (installed maps only)";
-  menu_add_text(&m_collision, text_air_wall_summary, 0);
-  menu_add_text(&m_collision, text_nearest_death, 0);
-  menu_add_text(&m_collision, text_last_fall, 0);
-  menu_add_text(&m_collision, text_air_wall_link, 0);
+  menu_add_heading(&m_scene, "map");
+  menu_item_t *reload = menu_add_action(&m_scene, "reload map", act_reload_map, 0);
+  if (reload)
+    reload->hint = "A: reload this map (at the age set in the link menu)";
 }
+
 
 /* --- settings --------------------------------------------------------------------------------- */
 
-static menu_t m_settings, m_input_display, m_frame_advance, m_about;
+static menu_t m_settings, m_settings_display, m_settings_gameplay, m_input_display, m_frame_advance, m_about;
 
 /* menu settings */
 #define OPACITY_STEP 10 /* percent per choice */
@@ -2219,37 +2226,54 @@ static void build_levitate(void)
 static bool get_reset_flight_speed(menu_item_t *it) { return levitate_reset_speed; }
 static void set_reset_flight_speed(menu_item_t *it, bool on) { levitate_reset_speed = on; }
 
+static bool get_overlay_hidden(menu_item_t *it) { return gfx_overlays_hidden; }
+static void set_overlay_hidden(menu_item_t *it, bool on) { gfx_overlays_hidden = on; }
+static bool get_void_bypass(menu_item_t *it) { return void_bypass_enabled(); }
+static void set_void_bypass(menu_item_t *it, bool on) { void_bypass_set(on); }
+
 static void build_settings(void)
 {
-  menu_init(&m_settings, "settings", 8);
-  menu_add_heading(&m_settings, "menu");
-  menu_item_t *language = menu_add_option(&m_settings, "language", 1, lang_names(), get_lang, set_lang, 0);
+  menu_init(&m_settings, "settings", 3);
+  menu_init(&m_settings_display, "display", 6);
+  menu_init(&m_settings_gameplay, "gameplay", 3);
+  menu_add_submenu(&m_settings, "display", &m_settings_display);
+  menu_add_submenu(&m_settings, "gameplay", &m_settings_gameplay);
+  menu_add_submenu(&m_settings, "about", &m_about);
+  menu_item_t *language = menu_add_option(&m_settings_display, "language", 1, lang_names(), get_lang, set_lang, 0);
   if (language)
     language->hint = "files in sd:/ootgz/lang (see lang/template.json)";
-  menu_item_t *size = menu_add_option(&m_settings, "size", ARRAY_LEN(size_names), size_names, get_size, set_size, 0);
+  menu_item_t *size = menu_add_option(&m_settings_display, "size", ARRAY_LEN(size_names), size_names, get_size, set_size, 0);
   if (size)
     size->hint = "text size of the practice menu and overlays (auto: for the screen)";
-  menu_item_t *opacity = menu_add_option(&m_settings, "background opacity", ARRAY_LEN(opacity_names), opacity_names,
+  menu_item_t *opacity = menu_add_option(&m_settings_display, "background opacity", ARRAY_LEN(opacity_names), opacity_names,
                                          get_opacity, set_opacity, 0);
   if (opacity)
     opacity->hint = "Opacity of the frozen menu backdrop and input display";
-  menu_item_t *pause_world = menu_add_check(&m_settings, "freeze game while open", get_menu_pause_world,
+  menu_item_t *pause_world = menu_add_check(&m_settings_gameplay, "freeze game while open", get_menu_pause_world,
                                              set_menu_pause_world, 0);
   if (pause_world) {
     pause_world->hint = "Capture the game picture and pause simulation. Off keeps the world live";
     pause_world->log_label = "menu world pause";
   }
-  menu_end_group(&m_settings);
-  menu_item_t *reset_speed = menu_add_check(&m_settings, "reset flight speed on hover toggle",
+  menu_item_t *reset_speed = menu_add_check(&m_settings_gameplay, "reset flight speed on hover toggle",
                                              get_reset_flight_speed, set_reset_flight_speed, 0);
   if (reset_speed)
     reset_speed->hint = "Start each L3 hover at 6. Off keeps the last flight speed";
 
-  menu_item_t *mini_hud = menu_add_check(&m_settings, "show gameplay mini-HUD", get_shown,
+  menu_item_t *mini_hud = menu_add_check(&m_settings_display, "show gameplay mini-HUD", get_shown,
                                           set_shown, 0);
   if (mini_hud)
     mini_hud->hint = "Show the Sloperina watch panel during gameplay. D-left + B toggles it";
-  menu_add_submenu(&m_settings, "about", &m_about);
+  menu_item_t *hide = menu_add_check(&m_settings_display, "hide practice overlays",
+                                    get_overlay_hidden, set_overlay_hidden, 0);
+  if (hide)
+    hide->hint = "D-right + Minus or X. The practice menu stays available";
+  if (void_bypass_available()) {
+    menu_item_t *bypass = menu_add_check(&m_settings_gameplay, "bypass contact void-outs",
+                                        get_void_bypass, set_void_bypass, 0);
+    if (bypass)
+      bypass->hint = "D-right + Y. Experimental. Resets at game launch";
+  }
 
   /* Built here because their settings are persisted; linked from functional categories below. */
   build_frame_advance();
@@ -2656,7 +2680,7 @@ void menus_splash(void)
   static char title[64], date[64];
   snprintf(title, sizeof(title), "sloperinaGZ - %s", BUILD_VERSION);
   snprintf(date, sizeof(date), TF("Build Date: %s"), BUILD_WHEN);
-  const char *lines[] = { title, date, "practicerom.com/oothd", 0, T("D-right + A: open the menu") };
+  const char *lines[] = { title, date, "practicerom.com/oothd", 0, T("D-right + Plus: open the menu") };
   static const uint8_t styles[] = { GFX_DIM, GFX_DIM, GFX_LOG, GFX_LOG, GFX_NORMAL };
   static const uint8_t indents[] = { 0, 0, 0, 0, 0 };
   gfx_splash(lines, styles, indents, ARRAY_LEN(lines), SPLASH_FRAMES);

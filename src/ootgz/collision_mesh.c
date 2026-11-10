@@ -1,7 +1,6 @@
 /* A simplified edge mesh of the static player collision, indexed in 8m cells. */
 #include "collision_mesh.h"
 
-#include "sdfs.h"
 #include "sys.h"
 
 #define MAX_CELLS 8192
@@ -16,17 +15,46 @@ typedef struct {
 _Static_assert(sizeof(mesh_cell_t) == 12 && sizeof(mesh_edge_t) == 14, "SGM1 layout");
 
 bool collision_mesh_shown;
-static char loaded_map[64], path[128];
-static mesh_cell_t cells[MAX_CELLS];
+static char loaded_map[64];
+static const mesh_cell_t *cells;
+static const mesh_edge_t *edges;
 static mesh_edge_t nearby[9 * EDGES_PER_CELL];
 static unsigned cell_count, nearby_count;
 static int last_x, last_z;
 static bool have_cell;
 
-static bool read_exact(fs_file_t file, int64_t offset, void *data, size_t size)
+#define ASSET(name) extern const uint8_t mesh_##name[], mesh_##name##_end[];
+ASSET(DodongoCavern)
+ASSET(ForestTemple)
+ASSET(InsideTheDekuTree)
+ASSET(KakarikoVillage_Adult)
+ASSET(KakarikoVillage_Child)
+ASSET(KokiriForest_Adult)
+ASSET(KokiriForest_Child)
+#undef ASSET
+
+static const struct {
+  const char *name;
+  const uint8_t *start, *end;
+} assets[] = {
+#define ASSET(name) { #name, mesh_##name, mesh_##name##_end },
+  ASSET(DodongoCavern)
+  ASSET(ForestTemple)
+  ASSET(InsideTheDekuTree)
+  ASSET(KakarikoVillage_Adult)
+  ASSET(KakarikoVillage_Child)
+  ASSET(KokiriForest_Adult)
+  ASSET(KokiriForest_Child)
+#undef ASSET
+};
+
+static bool same_map(const char *a, const char *b)
 {
-  size_t got;
-  return fs_read(&got, file, offset, data, size) == 0 && got == size;
+  while (*a && *a == *b) {
+    a++;
+    b++;
+  }
+  return *a == *b;
 }
 
 static int compare_cell(const mesh_cell_t *cell, int x, int z)
@@ -39,35 +67,28 @@ static void load_map(const char *map)
   cell_count = nearby_count = 0;
   have_cell = false;
   snprintf(loaded_map, sizeof(loaded_map), "%s", map);
-  for (const char *p = map; *p; p++) {
-    char c = *p;
-    if (!(c == '_' || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')))
+  for (unsigned i = 0; i < sizeof(assets) / sizeof(*assets); i++) {
+    if (!same_map(map, assets[i].name))
+      continue;
+    const uint32_t *header = (const uint32_t *)assets[i].start;
+    if (header[0] != 0x314d4753 || !header[1] || header[1] > MAX_CELLS)
       return;
-  }
-  snprintf(path, sizeof(path), SD_DIR "/mesh/%s.mesh", loaded_map);
-  fs_file_t file;
-  if (fs_open(&file, path, FS_READ) != 0)
-    return;
-  uint32_t header[2];
-  int64_t size;
-  if (fs_size(&size, file) == 0 && read_exact(file, 0, header, sizeof(header)) &&
-      header[0] == 0x314d4753 && header[1] && header[1] <= MAX_CELLS &&
-      read_exact(file, sizeof(header), cells, header[1] * sizeof(*cells))) {
-    uint32_t next = 0;
-    bool valid = true;
-    for (unsigned i = 0; i < header[1]; i++) {
-      const mesh_cell_t *cell = &cells[i];
+    cells = (const mesh_cell_t *)(header + 2);
+    edges = (const mesh_edge_t *)(cells + header[1]);
+    if ((uintptr_t)edges > (uintptr_t)assets[i].end)
+      return;
+    unsigned next = 0;
+    for (unsigned j = 0; j < header[1]; j++) {
+      const mesh_cell_t *cell = &cells[j];
       if (cell->first != next || !cell->count || cell->count > EDGES_PER_CELL ||
-          (i && compare_cell(&cells[i - 1], cell->x, cell->z) >= 0)) {
-        valid = false;
-        break;
-      }
+          (j && compare_cell(&cells[j - 1], cell->x, cell->z) >= 0))
+        return;
       next += cell->count;
     }
-    if (valid && size == (int64_t)(sizeof(header) + header[1] * sizeof(*cells) + next * sizeof(*nearby)))
+    if ((uintptr_t)assets[i].end - (uintptr_t)edges == next * sizeof(*edges))
       cell_count = header[1];
+    return;
   }
-  fs_close(file);
 }
 
 static const mesh_cell_t *find_cell(int x, int z)
@@ -102,17 +123,13 @@ static void load_nearby(int x, int z)
   last_z = z;
   have_cell = true;
   nearby_count = 0;
-  fs_file_t file;
-  if (fs_open(&file, path, FS_READ) != 0)
-    return;
-  int64_t start = 8 + cell_count * sizeof(*cells);
   for (unsigned i = 0; i < 9; i++) {
     const mesh_cell_t *cell = find_cell(x + offsets[i][0], z + offsets[i][1]);
-    if (cell && read_exact(file, start + cell->first * sizeof(*nearby), nearby + nearby_count,
-                           cell->count * sizeof(*nearby)))
+    if (cell) {
+      memcpy(nearby + nearby_count, edges + cell->first, cell->count * sizeof(*edges));
       nearby_count += cell->count;
+    }
   }
-  fs_close(file);
 }
 
 const mesh_edge_t *collision_mesh_near(const char *map, vec3f_t position, unsigned *count)
@@ -121,10 +138,7 @@ const mesh_edge_t *collision_mesh_near(const char *map, vec3f_t position, unsign
   if (!map || !*map || !(position.x >= -2048 && position.x < 2048 &&
                         position.z >= -2048 && position.z < 2048))
     return nearby;
-  unsigned i = 0;
-  while (i < sizeof(loaded_map) - 1 && loaded_map[i] && loaded_map[i] == map[i])
-    i++;
-  if (loaded_map[i] != map[i])
+  if (!same_map(map, loaded_map))
     load_map(map);
   if (cell_count) {
     int x = cell_coordinate(position.x), z = cell_coordinate(position.z);

@@ -51,11 +51,11 @@ static uint32_t frames_run;
 /* --- frame advance ---------------------------------------------------------------------------
  * With it on (settings > frame advance), a tap of its button (L or D-pad right, menu closed) pauses the game:
  * this hook, on the game's thread, holds it here, as a debugger's breakpoint would. While held, a
- * tap lets one frame through, and the button + L3 lets it run again; the menu still opens (D-right + A) and works as usual. gz's pause icon shows at the top left. The game never sees the
+ * tap lets one frame through, and the button + L3 lets it run again; the menu still opens (D-right + Plus) and works as usual. gz's pause icon shows at the top left. The game never sees the
  * button while it's on.
  * As in gz, everything else can be held or pressed meanwhile (the stick, A, Z...): the frame let
  * through reads the controller as it is, plus what was buffered while paused. Only R's shortcuts
- * (D-right + A and other practice chords) don't count as a tap, so they don't pause the game; L has none. */
+ * (D-right + Plus and other practice chords) don't count as a tap, so they don't pause the game; L has none. */
 bool frame_advance = true;
 bool pause_display = true;
 int frame_advance_button; /* 0 L, 1 R */
@@ -360,8 +360,22 @@ static void frame(void)
     watches_sync();
     menu_draw();
   }
-  airwall_frame(menu_current || transition);
-  enemyhp_frame(menu_current || transition);
+  if (!menu_current && !transition && !wait_for_ui_release &&
+      (input_shortcut(OVERLAY_TOGGLE_COMBO) || input_shortcut(OVERLAY_TOGGLE_ALT))) {
+    gfx_overlays_hidden = !gfx_overlays_hidden;
+    input_suppress_until_release(input_shortcut_held());
+  }
+  if (!menu_current && !transition && !wait_for_ui_release && input_shortcut(VOID_BYPASS_COMBO)) {
+    input_suppress_until_release(VOID_BYPASS_COMBO);
+    if (void_bypass_available()) {
+      void_bypass_set(!void_bypass_enabled());
+      gfx_notice(void_bypass_enabled() ? "contact void-out bypass on" : "contact void-out bypass off");
+    } else {
+      gfx_notice("contact void-out bypass unavailable");
+    }
+  }
+  airwall_frame(menu_current || transition || gfx_overlays_hidden);
+  enemyhp_frame(menu_current || transition || gfx_overlays_hidden);
   menus_research_frame();
   bool menu_owns_input = menu_current || input_menu_releasing();
   if (!transition)
@@ -402,6 +416,26 @@ __attribute__((used)) uint64_t ootgz_frame_entry(void *lock)
 static uint32_t encode_branch(uintptr_t from, uintptr_t to)
 {
   return A64_B_OPCODE | (uint32_t)(((intptr_t)(to - from) >> 2) & A64_B_IMM26_MASK);
+}
+
+static bool void_patch_present;
+
+bool void_bypass_available(void) { return void_patch_present; }
+
+bool void_bypass_enabled(void)
+{
+  return void_patch_present &&
+         (__atomic_load_n((uintptr_t *)MAIN(z64hd_game->hook_slot), __ATOMIC_RELAXED) & 1);
+}
+
+void void_bypass_set(bool enabled)
+{
+  if (!void_patch_present)
+    return;
+  uintptr_t *slot = (uintptr_t *)MAIN(z64hd_game->hook_slot);
+  uintptr_t target = (uintptr_t)ootgz_frame_entry;
+  __atomic_store_n(slot, target | (uintptr_t)enabled, __ATOMIC_RELAXED);
+  log_printf("void: contact bypass %s", enabled ? "on" : "off");
 }
 
 /* nnMain is resolved by rtld. Check the matching main header before reading any game offsets. */
@@ -457,6 +491,12 @@ __attribute__((used)) void ootgz_module_init(void)
     return;
   }
   *(volatile uintptr_t *)MAIN(z64hd_game->hook_slot) = (uintptr_t)ootgz_frame_entry;
+  if (z64hd_game->void_contact_site) {
+    uintptr_t site = MAIN(z64hd_game->void_contact_site);
+    uint32_t instruction;
+    void_patch_present = sys_read32(site, &instruction) &&
+      instruction == encode_branch(site, MAIN(z64hd_game->cave_start + OOTGZ_VOID_STUB_OFF));
+  }
   log_raw(z64hd_game->version);
   log_raw("frame hook installed");
 

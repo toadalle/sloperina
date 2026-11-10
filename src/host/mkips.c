@@ -6,7 +6,7 @@
  * expect; see FINDINGS §3):
  *   CAVE_START          "OOTGZ\0\0\0" + u32 version + u32 revision (the module checks this)
  *   CAVE_START + 0x40   stub:  adrp x16, slot ; ldr x16, [x16, #slot_lo]
- *                              cbz  x16, 1f   ; br  x16
+ *                              cbz  x16, 1f   ; bfc x16, #0, #1 ; br x16
  *                          1:  b    unlock               (original behaviour until hooked)
  *   FRAME_SITE          b stub                            (was: b unlock, a tail call)
  */
@@ -21,7 +21,7 @@
 #define NSO_HEADER 0x100
 
 #define X16         16 /* the stub's scratch register (IP0: free to clobber at a branch) */
-#define STUB_INSNS  5
+#define STUB_INSNS  6
 #define STUB_SIZE   (STUB_INSNS * 4)
 #define MARKER_SIZE 16 /* OOTGZ_MARKER (8), the version (4), the revision (4) */
 
@@ -55,6 +55,17 @@ static uint32_t insn_cbz_x(int rt, uint32_t from, uint32_t to)
 }
 
 static uint32_t insn_br(int rn) { return 0xD61F0000u | (uint32_t)rn << 5; }
+
+static uint32_t insn_cond(uint32_t from, uint32_t to, unsigned condition)
+{
+  return 0x54000000u | (((uint32_t)((int32_t)(to - from) >> 2) & 0x7FFFF) << 5) | condition;
+}
+
+static uint32_t insn_tbnz(int rt, int bit, uint32_t from, uint32_t to)
+{
+  return 0x37000000u | (uint32_t)bit << 19 |
+         (((uint32_t)((int32_t)(to - from) >> 2) & 0x3FFF) << 5) | (uint32_t)rt;
+}
 
 /* --- writing the patch -------------------------------------------------------------------- */
 
@@ -112,9 +123,10 @@ int main(int argc, char **argv)
   uint32_t code[STUB_INSNS] = {
     insn_adrp(X16, stub_at, build->hook_slot),
     insn_ldr_x(X16, X16, build->hook_slot & 0xFFF),
-    insn_cbz_x(X16, stub_at + 8, stub_at + 16), /* no hook yet: to the original branch */
+    insn_cbz_x(X16, stub_at + 8, stub_at + 20), /* no hook yet: to the original branch */
+    0xB34003F0, /* bfc x16, #0, #1: strip the session's void bypass bit */
     insn_br(X16),
-    insn_b(stub_at + 16, build->gd_unlock),
+    insn_b(stub_at + 20, build->gd_unlock),
   };
   uint8_t stub[STUB_SIZE];
   for (int i = 0; i < STUB_INSNS; i++)
@@ -132,6 +144,32 @@ int main(int argc, char **argv)
   write_record(f, build->cave_start, marker, sizeof(marker));
   write_record(f, stub_at, stub, sizeof(stub));
   write_record(f, build->frame_site, site, sizeof(site));
+  if (build->void_contact_site) {
+    uint32_t cave = build->cave_start + OOTGZ_VOID_STUB_OFF;
+    uint32_t accept = build->void_contact_accept;
+    uint32_t native_next = build->void_contact_site + 4;
+    /* Preserve the native tst result. The second native mask bit (9)
+     * always takes the original branch; only the sampled bit 3 is optional. */
+    uint32_t contact[] = {
+      insn_cond(cave, cave + 24, 0), /* b.eq to native fallthrough */
+      insn_tbnz(9, 9, cave + 4, cave + 20),
+      insn_adrp(X16, cave + 8, build->hook_slot),
+      insn_ldr_x(X16, X16, build->hook_slot & 0xFFF),
+      insn_tbnz(X16, 0, cave + 16, cave + 24),
+      insn_b(cave + 20, accept),
+      insn_b(cave + 24, native_next),
+    };
+    uint8_t body[sizeof(contact)];
+    if (cave + sizeof(body) > build->cave_end) {
+      fclose(f);
+      return 1;
+    }
+    for (size_t i = 0; i < sizeof(contact) / sizeof(*contact); i++)
+      put_le32(body + 4 * i, contact[i]);
+    write_record(f, cave, body, sizeof(body));
+    put_le32(site, insn_b(build->void_contact_site, cave));
+    write_record(f, build->void_contact_site, site, sizeof(site));
+  }
   fwrite("EEOF", 1, 4, f);
   if (fclose(f) != 0) {
     perror(argv[1]);

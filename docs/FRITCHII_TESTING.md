@@ -7,12 +7,12 @@ primarily for OoT 1.1.1. The controls, dashboard, and text capture are also
 available on 1.0.0 where the corresponding fields can be read.
 
 1. **Menu and HUD.** On a map with Link and visible animated actors, open with
-   D-pad right + A. Expect a narrow vertical menu at the top left and a static
+   D-pad right + Plus. Expect a narrow vertical menu at the top left and a static
    backdrop with Link, actors, and the stock HUD visible. On RGBA8, the frozen
    menu background uses the opacity setting. The header should move from
    FREEZING to PAUSED. Turn off Settings > Freeze game while open and check
    that animations advance behind the menu. Navigate using D-pad and left
-   stick, then close with B or D-pad right + A while holding a stick off center.
+   stick, then close with B or D-pad right + Plus while holding a stick off center.
    The held stick should stay suppressed until centered. Plus alone should
    still open the stock pause screen. While playing the ocarina, hold D-pad right and
    press A. The note should play and the practice menu should stay closed.

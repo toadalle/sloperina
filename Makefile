@@ -65,6 +65,7 @@ FORCE:
 $(OBJDIR)/%.o: $(SRCDIR)/%.c $(HDRS) | $(OBJDIR)
 	$(CC) $(CFLAGS) -I$(OBJDIR) -c $< -o $@
 $(OBJDIR)/menus.o: $(OBJDIR)/build_info.h
+$(OBJDIR)/mesh_assets.o: $(wildcard data/mesh/*.mesh)
 $(OBJDIR)/%.o: $(SRCDIR)/%.S | $(OBJDIR)
 	$(CC) $(ASFLAGS) -c $< -o $@
 $(BINDIR)/ootgz.elf: $(patsubst $(SRCDIR)/%,$(OBJDIR)/%.o,$(basename $(SSRC) $(CSRC))) $(LDSCRIPT) | $(BINDIR)
@@ -99,7 +100,6 @@ dist: all
 	cp $(BINDIR)/$(SUBSDK) $(PATCHES) $(DISTDIR)/exefs/
 	# the SD card: the translation template (tools/lang_template.py), sd:/sloperinaGZ/lang/
 	mkdir -p $(DISTDIR)/sd/$(NAME)/lang && cp lang/template.json $(DISTDIR)/sd/$(NAME)/lang/
-	mkdir -p $(DISTDIR)/sd/$(NAME)/mesh && cp data/mesh/*.mesh $(DISTDIR)/sd/$(NAME)/mesh/
 
 clean:
 	rm -rf $(OBJDIR) $(BINDIR) $(DISTDIR)

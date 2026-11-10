@@ -145,12 +145,10 @@ void input_set_native_ui(bool owned)
 static uint32_t shortcut_mask(uint64_t buttons)
 {
   uint32_t directions = buttons & (BTN_DLEFT | BTN_DRIGHT);
-  if (directions == BTN_DLEFT)
-    return (buttons & BTN_B) ? MINI_HUD_COMBO : 0;
-  if (directions != BTN_DRIGHT)
+  if (directions != BTN_DLEFT && directions != BTN_DRIGHT)
     return 0;
-  uint32_t action = buttons & PRACTICE_RIGHT_ACTIONS;
-  return action && !(action & (action - 1)) ? BTN_DRIGHT | action : 0;
+  uint32_t action = buttons & (directions == BTN_DRIGHT ? PRACTICE_RIGHT_ACTIONS : PRACTICE_LEFT_ACTIONS);
+  return action && !(action & (action - 1)) ? directions | action : 0;
 }
 
 uint32_t input_shortcut_held(void) { return shortcut_mask(buttons_held); }

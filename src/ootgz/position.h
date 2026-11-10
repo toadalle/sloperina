@@ -1,4 +1,4 @@
-/* gz's save / load position: D-right + X saves Link's position and facing, D-right + Y puts him
+/* gz's save / load position: D-left + X saves Link's position and facing, D-left + Y puts him
  * back there (menu closed; also link > save / load position). In the same map only. Link is moved
  * through his physics record, which levitate.c finds and keeps (link_record_*). */
 #ifndef POSITION_H

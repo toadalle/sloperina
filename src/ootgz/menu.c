@@ -921,7 +921,7 @@ void menu_draw(void)
            menu_pause_owned ? "PAUSED" : "LIVE");
   for (int k = 0; k < title_rows; k++)
     gfx_text(2, k + 1, GFX_TITLE, title_lines[k]);
-  gfx_text(2, footer, GFX_DIM, "D-PAD  Move     A  Select     B  Back     D-RIGHT+A  Close");
+  gfx_text(2, footer, GFX_DIM, "D-PAD  Move     A  Select     B  Back     D-RIGHT+PLUS  Close");
   for (int row = 0; row < pinned + visible; row++) {
     int index = row < pinned ? row : menu->scroll + row - pinned;
     if (index >= menu->n_items)

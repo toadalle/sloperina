@@ -1192,13 +1192,14 @@ static void compose_see_through(int p, uint8_t *dst, const uint8_t *under, int u
 
 static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_BLOCKS] = { 0.26f, 0.60f, 1.0f, 1.0f }, /* blue: stops Link */
-  [AW_OTHER] = { 0.53f, 0.84f, 0.91f, 1.0f },  /* pale cyan: special-purpose barriers */
+  [AW_OTHER] = { 0.68f, 0.65f, 0.86f, 1.0f },  /* lavender: special-purpose barriers */
   [AW_LOADING] = { 1.0f, 0.86f, 0.23f, 1.0f },
   [AW_VOID] = { 1.0f, 0.26f, 0.22f, 1.0f },
   [AW_GROTTO_SAFETY] = { 0.79f, 0.48f, 1.0f, 1.0f },
   [AW_FALL_SAMPLE] = { 1.0f, 0.50f, 0.15f, 1.0f },
   [AW_MESH_FLOOR] = { 0.28f, 0.83f, 0.37f, 1.0f },
   [AW_MESH_WALL] = { 0.22f, 0.62f, 0.98f, 1.0f },
+  [AW_BAKED_BARRIER] = { 0.38f, 0.88f, 1.0f, 1.0f },
   [AW_MESH_CEILING] = { 0.94f, 0.34f, 0.72f, 1.0f },
 };
 
@@ -1607,7 +1608,7 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
   int n_dots, n_hp;
   const aw_dot_t *dots = airwall_published(&n_dots);
   const aw_dot_t *hp = enemyhp_published(&n_hp);
-  int pause_icon = gfx_pause_icon;
+  int pause_icon = gfx_overlays_hidden ? 0 : gfx_pause_icon;
   if (overlay_state == OV_FAILED) {
     freeze_fail(token, "overlay renderer disabled");
     return;

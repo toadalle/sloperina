@@ -72,6 +72,7 @@ void watch_text(watch_t w, char *buf, int len);
 extern bool js_height_lock;
 bool js_height_reset(void); /* false if the current threshold is not readable/writable */
 void timer_toggle(void);
+bool timer_pause_toggle(void);
 void timer_reset(void);
 void lag_reset(void);
 /* frame hook: commands (menu closed) and the on-screen panel */
