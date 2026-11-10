@@ -37,6 +37,14 @@ The implementation:
 
 This path is source-reviewed but **runtime-unvalidated**.
 
+### Air-wall overlay cleanup
+
+- Retains the existing cached-per-map geometry and nearest-first dot budget.
+- Rejects out-of-range wall spheres with squared distance before paying for a square root.
+- Rejects wall spheres wholly outside the camera frustum before projecting individual edges.
+- This is intentionally a small optimization of the legacy overlay, not a substitute for the
+  planned batched/depth-aware scene renderer.
+
 ### Hover / ghost mode
 
 - L3 toggles hover.

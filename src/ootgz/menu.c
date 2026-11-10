@@ -335,7 +335,7 @@ static void change_value(menu_item_t *item, int direction)
   }
 }
 
-/* L on an item */
+/* A on an item */
 static void activate_item(menu_item_t *item)
 {
   switch (item->kind) {
