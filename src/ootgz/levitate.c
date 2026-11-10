@@ -8,7 +8,7 @@
  * each (kept only if his drawn position follows; put back at once otherwise). The pointer path to the
  * one that works is logged, so a later version can go straight to it.
  *
- * Hover is toggled from the menu. X rises and B descends,
+ * L3 toggles hover and R3 toggles ghost collision while hovering. X rises and B descends,
  * and releasing both holds altitude. The left stick moves him
  * relative to the camera. Walls: the game pushes
  * Link back out of them between our writes; a push-back is a move against his heading (after he has
@@ -1073,6 +1073,19 @@ static void frame(bool menu_open)
   protect_landing(menu_open);
   if (!levitate_enabled && floating)
     levitate_set_hover(false);
+  if (!menu_open && levitate_enabled && !(input_held() & BTN_DRIGHT)) {
+    uint32_t pressed = input_pressed();
+    if (pressed & BTN_LSTICK) {
+      levitate_set_hover(!floating);
+      if (!floating)
+        gfx_notice("levitate off");
+      else if (search_state != SEARCH_READY)
+        gfx_notice("hover: locating Link");
+    } else if (floating && (pressed & BTN_RSTICK)) {
+      levitate_through_walls = !levitate_through_walls;
+      gfx_notice(levitate_through_walls ? "ghost mode on" : "ghost mode off");
+    }
+  }
 
   if (!floating && !requested && !cheats[CHEAT_SPEED] && !cheats[CHEAT_WALLS] &&
       (search_state == SEARCH_FINDING || search_state == SEARCH_TESTING))
@@ -1160,7 +1173,8 @@ void levitate_frame(bool menu_open, bool native_ui)
     cct_noclip_end();
   /* Update after toggles, failed searches and scene changes as well as normal steps.
    * Our input reads remain raw; only the game's HID wrappers mask these buttons. */
-  input_hide_from_game = floating ? BTN_X | BTN_B : 0;
+  input_hide_from_game = (levitate_enabled ? BTN_LSTICK : 0) |
+                         (floating ? BTN_RSTICK | BTN_X | BTN_B : 0);
   /* Hover owns horizontal movement; keep the right stick available to the camera. */
   input_hide_sticks_from_game = floating ? INPUT_HIDE_LEFT_STICK : 0;
 }

@@ -61,6 +61,8 @@ These work with the menu closed.
 | **D-pad right + B** | Pause or resume the current timer run |
 | **D-pad right + Minus** | Hide or restore practice overlays |
 | **D-pad right + X** | Toggle the experimental contact void-out bypass (1.1.1) |
+| **L3** | Start or stop hover when levitation is enabled |
+| **R3** | Toggle ghost mode while hovering |
 | **X / B** (held, while floating) | Levitate up / down; release to hover |
 
 Everything you do shows for a moment in the bottom-right corner (gz's log), for example `infinite magic on` or
@@ -102,10 +104,10 @@ to add it. Or open **debug > memory**, find the value, edit the row (**L**) and 
 **scene > collision > show**. Cyan walls stop Link; red ones are walls he's inside.
 
 **...float around?**
-Open **Cheats > Levitation & Ghost** and turn on **Enabled** and **Hover Active**.
-While hovering, use the left stick to move, hold **X** to rise or **B** to descend,
-and release both to hold altitude. Ghost mode and flight speed are set in the
-same menu. Turn off **Hover Active** to restore collision and drop.
+Enable levitation in **Cheats > Levitation & Ghost**, then press **L3** to start
+or stop hover. Press **R3** to toggle ghost mode while hovering. Use the left
+stick to move, hold **X** to rise or **B** to descend, and release both to hold
+altitude. Flight speed is set in the same menu.
 
 Use **Debug Tools > Frame Advance** to pause gameplay, advance one frame, or
 resume. Open the menu with D-pad right + Plus even when gameplay is held.

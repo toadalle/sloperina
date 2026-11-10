@@ -2172,7 +2172,7 @@ static void build_levitate(void)
   menu_add_heading(&m_levitate, "levitation options");
   menu_item_t *lv = menu_add_check(&m_levitate, "enabled", get_levitate, set_levitate, 0);
   if (lv)
-    lv->hint = "Enable the Hover Active checkbox to fly. X/B move up/down", lv->log_label = "levitate";
+    lv->hint = "L3 toggles hover, R3 toggles ghost during hover, X/B move up/down", lv->log_label = "levitate";
   menu_add_check(&m_levitate, "hover active", get_hover_active, set_hover_active, 0);
   menu_add_check(&m_levitate, "ghost while hovering", get_ghost_active, set_ghost_active, 0);
   menu_item_t *walls = menu_add_check(&m_levitate, "start hover in ghost mode", get_walls, set_walls, 0);

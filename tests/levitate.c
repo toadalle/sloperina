@@ -308,37 +308,51 @@ static void test_vertical_controls(void)
   held = BTN_X;
   levitate_set_hover(true);
   levitate_frame(false, false);
-  assert(floating && input_hide_from_game == (BTN_X | BTN_B));
+  assert(floating && input_hide_from_game == (BTN_LSTICK | BTN_RSTICK | BTN_X | BTN_B));
   assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
   levitate_set_hover(false);
   levitate_frame(false, false);
-  assert(!floating && input_hide_from_game == 0 && input_hide_sticks_from_game == 0);
+  assert(!floating && input_hide_from_game == BTN_LSTICK && input_hide_sticks_from_game == 0);
   start(true);
   mapped = false;
   levitate_frame(false, false);
-  assert(!floating && input_hide_from_game == 0);
+  assert(!floating && input_hide_from_game == BTN_LSTICK);
   puts("PASS: X/B ascent/descent, hover, reversal, floor bypass and gameplay masking");
 }
 
-static void test_removed_hotkeys(void)
+static void test_hover_hotkeys(void)
 {
   start(false);
+  levitate_set_hover(false);
+  held = pressed = BTN_RSTICK;
+  levitate_frame(false, false);
+  assert(!floating && !levitate_through_walls && input_hide_from_game == BTN_LSTICK);
+  held = pressed = BTN_LSTICK;
+  levitate_frame(true, false);
+  assert(!floating);
+  levitate_frame(false, true);
+  assert(!floating && input_hide_from_game == 0);
+  levitate_frame(false, false);
+  assert(floating && !levitate_through_walls);
   levitate_move_speed = 8;
-  const uint32_t removed[] = {
-    BTN_A, BTN_Y, BTN_LSTICK, BTN_RSTICK, BTN_DRIGHT | BTN_RSTICK,
-  };
+  const uint32_t removed[] = { BTN_A, BTN_Y, BTN_DRIGHT | BTN_RSTICK };
   for (unsigned i = 0; i < sizeof(removed) / sizeof(*removed); i++) {
     held = pressed = removed[i];
     levitate_frame(false, false);
     assert(floating && levitate_move_speed == 8 && !levitate_through_walls && !cheats[CHEAT_WALLS]);
   }
-  levitate_set_hover(false);
+  held = pressed = BTN_RSTICK;
+  levitate_frame(true, false);
+  assert(!levitate_through_walls);
+  levitate_frame(false, false);
+  assert(levitate_through_walls && controller_active);
+  levitate_frame(false, false);
+  assert(!levitate_through_walls && !controller_active);
   held = pressed = BTN_LSTICK;
   levitate_frame(false, false);
-  assert(!floating && input_hide_from_game == 0);
-  puts("PASS: retired hover, ghost, walking bypass and speed shortcuts do nothing");
+  assert(!floating && input_hide_from_game == BTN_LSTICK);
+  puts("PASS: L3 hover and R3 ghost respect menu and dialogue ownership");
 }
-
 
 static void test_transition_handoff(void)
 {
@@ -524,7 +538,7 @@ int main(void)
   test_release();
   test_vertical_controls();
   test_ghost_toggle();
-  test_removed_hotkeys();
+  test_hover_hotkeys();
   test_idle_and_respawn();
   test_reset_speed();
   test_dialogue_handoff();

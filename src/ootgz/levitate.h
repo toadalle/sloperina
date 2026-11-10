@@ -1,5 +1,5 @@
-/* Hover is enabled through the menu. X/B move vertically and the left stick
- * moves horizontally while hover owns Link. */
+/* L3 toggles hover. R3 toggles ghost during hover, X/B move vertically,
+ * and the left stick moves horizontally. */
 #ifndef LEVITATE_H
 #define LEVITATE_H
 

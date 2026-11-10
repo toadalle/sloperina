@@ -53,7 +53,7 @@ int main(void)
   const uint32_t removed[] = {
     BTN_DLEFT | BTN_B, BTN_DLEFT | BTN_X, BTN_DLEFT | BTN_Y, BTN_DLEFT | BTN_PLUS,
     BTN_DLEFT | BTN_MINUS, BTN_DRIGHT | BTN_Y, BTN_DRIGHT | BTN_RSTICK, BTN_DRIGHT | BTN_ZL,
-    BTN_L, BTN_LSTICK, BTN_RSTICK,
+    BTN_L,
   };
   for (unsigned i = 0; i < sizeof(removed) / sizeof(*removed); i++) {
     raw.buttons = removed[i];
