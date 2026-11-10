@@ -357,8 +357,10 @@ static bool test_start(void)
   bool motion_zero;
   if (!sys_mapped(addr, RECORD_SIZE, SYS_PERM_R | SYS_PERM_W) || !link_drawn_pos(&test_start_pos))
     return false;
+  double error;
+  if (!record_matches(addr, &error) || !plausible_motion(addr + RECORD_POS_SIZE, &motion_zero))
+    return false;
   memcpy(saved_record, (void *)addr, sizeof(saved_record));
-  plausible_motion(addr + RECORD_POS_SIZE, &motion_zero);
   log_printf("levitate: testing %#lx (off by %.3f, motion %s)", (unsigned long)addr,
              candidate.error, motion_zero ? "zero" : "set");
   test_wrote_motion = motion_zero;

@@ -263,7 +263,8 @@ static const struct { const char *key; size_t field_offset; } int_keys[] = {
   INT_KEY("watch_y", watch_y),
   INT_KEY("opacity", opacity),
   INT_KEY("menu_size", menu_scale),
-  INT_KEY("practice_menu_pause", menu_pause_world),
+  INT_KEY("menu_pause_world", menu_pause_world),
+  INT_KEY("practice_menu_pause", menu_pause_world), /* compatibility with the first test build */
   INT_KEY("frame_advance", frame_advance),
   INT_KEY("pause_display", pause_display),
   INT_KEY("frame_advance_button", frame_advance_button),
@@ -454,7 +455,7 @@ static void save_settings_file(const snapshot_t *s)
   if (n < (int)sizeof(buf))
     n += snprintf(buf + n, sizeof(buf) - n,
                   "language=%s\nframe_advance=%d\nframe_advance_button=%d\npause_display=%d\nmenu_size=%d\n"
-                  "practice_menu_pause=%d\ninput_display=%d\ninput_display_background=%d\ninput_display_parts=%d\n"
+                  "menu_pause_world=%d\ninput_display=%d\ninput_display_background=%d\ninput_display_parts=%d\n"
                   "input_display_style=%d\ninput_display_size=%d\n",
                   s->lang, (int)s->frame_advance, (int)s->frame_advance_button, (int)s->pause_display,
                   (int)s->menu_scale, (int)s->menu_pause_world, (int)s->input_display, (int)s->input_display_bg,

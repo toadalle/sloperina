@@ -16,7 +16,7 @@ available on 1.0.0 where the corresponding fields can be read.
    still open the stock pause screen. Test opening from a bumper frame-advance
    hold and verify that closing returns to the hold. If backdrop capture or
    native pause is unavailable, the dashboard stays LIVE and reports the
-   fallback. The freeze choice persists under `practice_menu_pause`.
+   fallback. The freeze choice persists under `menu_pause_world`.
 2. **Flight presets.** Start hover with L3. At low and high presets, compare
    horizontal travel and the distance covered by holding X or B for the same
    time. Y/A step the preset, R + R3 sets it to 6, and X+B holds altitude.
@@ -49,7 +49,8 @@ card** folder. The `ootgz:` prefix is the guest mount name. Folder names use
 the guest's tick counter and a capture number. Zip the selected folders on the
 host to share them. A manifest lists the build, sample conditions, addresses,
 field offsets, unavailable fields and any binary write errors. The report is
-bounded to 8 KiB, and the optional redacted Link record is at most 72 bytes.
+bounded to 8 KiB. Deep Diagnostics can also include a redacted Link record
+(up to 72 bytes) and the camera eye/look-at vector pair (24 bytes).
 
 The capture happens from the menu. Controller inputs reflect that capture
 frame, and the game can continue updating while the live menu is open.

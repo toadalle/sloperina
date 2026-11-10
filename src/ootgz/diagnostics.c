@@ -50,7 +50,7 @@ static bool write_file(const char *dir, const char *name, const void *data, size
   return written;
 }
 
-static void sample_link_and_camera(void)
+static uintptr_t sample_link_and_camera(vec3f_t pose[2])
 {
   uintptr_t actor = link_actor();
   vec3f_t feet;
@@ -62,15 +62,17 @@ static void sample_link_and_camera(void)
   if (actor && link_facing(&fx, &fz))
     append("Link facing XZ=%.5f %.5f\n", fx, fz);
   uintptr_t cam = camera();
-  vec3f_t pose[2]; /* camera +0x38 eye, +0x44 look-at */
-  if (cam && sys_mapped(cam + 0x38, sizeof(pose), SYS_PERM_R)) {
-    memcpy(pose, (const void *)(cam + 0x38), sizeof(pose));
+  /* Camera +0x38 eye, +0x44 look-at. Sample once for both report and binary. */
+  if (cam && sys_mapped(cam + 0x38, 2 * sizeof(*pose), SYS_PERM_R)) {
+    memcpy(pose, (const void *)(cam + 0x38), 2 * sizeof(*pose));
     append("Camera=%#lx eye=%.4f %.4f %.4f look-at=%.4f %.4f %.4f\n", (unsigned long)cam,
            pose[0].x, pose[0].y, pose[0].z, pose[1].x, pose[1].y, pose[1].z);
   } else {
     append("Camera pose unavailable\n");
+    cam = 0;
   }
   append("Room, action, animation, camera owner and camera collision fields unavailable\n");
+  return cam;
 }
 
 static void sample_controller(void)
@@ -163,7 +165,8 @@ void diagnostics_dump(bool deep)
   } else {
     append("PauseManager entries unavailable\n");
   }
-  sample_link_and_camera();
+  vec3f_t pose[2];
+  uintptr_t cam = sample_link_and_camera(pose);
   sample_controller();
 
   uint8_t record[72];
@@ -183,6 +186,14 @@ void diagnostics_dump(bool deep)
     } else {
       partial = base != 0;
       append("link-record.bin unavailable (%s)\n", partial ? "write failed" : "no verified current record");
+    }
+    if (cam && write_file(dir, "camera-pose.bin", pose, sizeof(pose))) {
+      append("camera-pose.bin base=%#lx bytes=%u, little endian\n", (unsigned long)(cam + 0x38),
+             (unsigned)sizeof(pose));
+      append("Offset 0x00: f32 XYZ eye. Offset 0x0c: f32 XYZ look-at.\n");
+    } else {
+      partial |= cam != 0;
+      append("camera-pose.bin unavailable (%s)\n", cam ? "write failed" : "no readable camera");
     }
     sample_history();
   }

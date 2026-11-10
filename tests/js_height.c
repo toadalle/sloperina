@@ -238,7 +238,7 @@ static void test_settings(void)
   snprintf(settings, sizeof(settings), "levitate_speed=-1\n");
   settings_load();
   assert(levitate_speed == 0); /* invalid negative speed is ignored */
-  snprintf(settings, sizeof(settings), "levitate_speed=4\nmenu_pause_world=1\n");
+  snprintf(settings, sizeof(settings), "levitate_speed=4\n");
   menu_pause_world = true;
   settings_load();
   assert(levitate_speed == 4 && menu_pause_world && levitate_reset_speed);
@@ -247,7 +247,7 @@ static void test_settings(void)
   assert(!menu_pause_world && !levitate_reset_speed);
   watch_set_label(0, "pause save");
   for (int i = 0; i < 60; i++) settings_frame(false);
-  assert(strstr(settings, "practice_menu_pause=0\n"));
+  assert(strstr(settings, "menu_pause_world=0\n"));
   assert(strstr(settings, "levitate_reset_speed=0\n"));
   snprintf(settings, sizeof(settings), "practice_menu_pause=1\n");
   settings_load();

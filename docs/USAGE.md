@@ -18,23 +18,24 @@ A quick guide to get you practising. For every option in every menu, see the [ma
    sloperinaGZ works with **The Legend of Zelda: Ocarina of Time (Switch 2), versions 1.0.0 and 1.1.1**.
 2. **Start the game.** For a few seconds the bottom-right corner shows sloperinaGZ's name, version and
    build date, the website, and how to open the menu. That means it's running.
-3. **Open the menu:** hold **R** and push the **right stick down**. Do the same again to close it.
+3. **Open the menu:** press **R + Plus**. Press the chord again to close it.
 
-While the menu is open, the game doesn't see your controller, so you can't accidentally walk off a ledge while
-picking an option.
+The menu freezes the game over a captured backdrop by default on supported
+builds. Turn off **Settings > Freeze game while open** for live inspection.
+Menu input stays separate from gameplay in either mode.
 
 ## Controls
 
-The menu works like gz's: the D-pad moves, **L** selects.
+Navigate with the D-pad or left stick. **A** selects and **B** goes back.
 
 | Button | In the menu |
 |---|---|
-| **R + right stick down** | Open or close the menu |
+| **R + Plus** | Open or close the menu |
 | **D-pad up / down** | Move up and down the list |
 | **D-pad left / right** | Change a value (switches, numbers), or pick a button on a row of buttons |
-| **L** | Select: open a menu, tick a box, press a button |
+| **A** | Open a menu, tick a box or activate an action |
 | **L held + D-pad left / right** | Change a number by 10 |
-| **R + D-pad left** | Go back one menu (at the top: close the menu) |
+| **B** | Go back one menu or close the dashboard |
 | **return** (the last item) | Go back one menu |
 
 The line at the bottom of the menu always tells you what the buttons do for the item you're on.
