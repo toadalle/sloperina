@@ -146,3 +146,8 @@ count as Fritchii runtime validation.
 3. Trace R+Plus native pause leakage using the real HID routing and fix it without suppressing unrelated Plus behavior.
 4. Validate hover release and standard-hover collision, especially the difference between ForceNoHit ownership and record-only motion.
 5. Replace root/menu text styling with real independent cards/layout primitives only after renderer architecture review; add actual scene-layer categories with measured GPU cost and verified semantics.
+
+### Additional input refinements
+
+- While hovering, Y lowers and A raises **horizontal** flight speed through the existing 2/4/6/8/12/20/30 units-per-second presets. Both pressed together have no effect. Game actions on Y/A are masked during hover; menu A still confirms selections when open.
+- Practice-menu navigation now accepts the left analog stick in addition to the D-pad with a high dead zone, single dominant axis and key-repeat cadence, including value adjustments and the two-column root grid.

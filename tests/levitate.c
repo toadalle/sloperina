@@ -212,6 +212,7 @@ static void test_vertical_controls(void)
   levitate_frame(false);
   assert(floating && input_hide_from_game == (BTN_LSTICK | BTN_RSTICK | BTN_X | BTN_B));
   assert(input_hide_sticks_from_game == INPUT_HIDE_LEFT_STICK);
+  assert((input_hide_from_game & (BTN_Y | BTN_A)) == (BTN_Y | BTN_A));
   levitate_frame(false); /* second L3 press turns it off in the same frame */
   assert(!floating && input_hide_from_game == BTN_LSTICK && input_hide_sticks_from_game == 0);
   levitate_enabled = false;
@@ -222,6 +223,35 @@ static void test_vertical_controls(void)
   levitate_frame(false);
   assert(!floating && input_hide_from_game == BTN_LSTICK);
   puts("PASS: X/B ascent/descent, hover, reversal, both/hold/menu, floor bypass and button masking");
+}
+
+static void test_flight_speed_buttons(void)
+{
+  start(false);
+  levitate_move_speed = 6;
+  held = pressed = BTN_A;
+  levitate_frame(false);
+  assert(levitate_move_speed == 8);
+  assert((input_hide_from_game & (BTN_A | BTN_Y)) == (BTN_A | BTN_Y));
+  pressed = 0;
+  levitate_frame(false);
+  assert(levitate_move_speed == 8); /* no repeat while held */
+  held = pressed = BTN_Y;
+  levitate_frame(false);
+  assert(levitate_move_speed == 6);
+  levitate_move_speed = 2;
+  levitate_frame(false);
+  assert(levitate_move_speed == 2); /* minimum */
+  levitate_move_speed = 30;
+  held = pressed = BTN_A;
+  levitate_frame(false);
+  assert(levitate_move_speed == 30); /* maximum */
+  held = pressed = BTN_A | BTN_Y;
+  levitate_frame(false);
+  assert(levitate_move_speed == 30); /* simultaneous presses cancel */
+  levitate_frame(true);
+  assert(levitate_move_speed == 30); /* menu A/Y does not change flight speed */
+  puts("PASS: Y/A bounded flight speed presets, no held-repeat, gameplay masking and menu guard");
 }
 
 static void test_ghost_toggle(void)
@@ -387,6 +417,7 @@ int main(void)
   test_release();
   test_vertical_controls();
   test_ghost_toggle();
+  test_flight_speed_buttons();
   test_controller_path();
   return 0;
 }

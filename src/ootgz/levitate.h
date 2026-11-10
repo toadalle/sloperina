@@ -1,4 +1,5 @@
 /* Hover: L3 toggles it, R3 toggles ghost collision while hovering, X/B rise/descend,
+ * Y/A lower/raise horizontal flight speed one preset per press,
  * and release holds altitude. Left stick moves horizontally but is hidden from the
  * game's normal movement state machine while hover owns Link. */
 #ifndef LEVITATE_H

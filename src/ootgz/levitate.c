@@ -45,6 +45,25 @@ bool levitate_through_walls;
 int levitate_speed = 4;       /* rise, units/s */
 int levitate_move_speed = 6;  /* stick, units/s */
 
+/* Shared with the move-speed menu options: one Y/A tap moves one preset. */
+static const int flight_speeds[] = { 2, 4, 6, 8, 12, 20, 30 };
+
+static void adjust_flight_speed(int direction)
+{
+  int index = 0;
+  if (direction > 0) {
+    while (index < (int)(sizeof(flight_speeds) / sizeof(flight_speeds[0])) - 1 &&
+           flight_speeds[index] <= levitate_move_speed)
+      index++;
+  } else {
+    index = (int)(sizeof(flight_speeds) / sizeof(flight_speeds[0])) - 1;
+    while (index > 0 && flight_speeds[index] >= levitate_move_speed)
+      index--;
+  }
+  levitate_move_speed = flight_speeds[index];
+  gfx_logf("flight speed: %d", levitate_move_speed);
+}
+
 /* the physics record: position (3 doubles), then motion state (12 words) */
 #define RECORD_POS_SIZE 24
 #define MOTION_SIZE 48
@@ -959,6 +978,14 @@ static void frame(bool menu_open)
   double dt = frame_seconds();
   protect_landing(menu_open);
   handle_l3(menu_open);
+  if (!menu_open && floating) {
+    uint32_t speed_buttons = input_pressed() & (BTN_Y | BTN_A);
+    /* Both pressed at once are a no-op; other input stays fully available. */
+    if (speed_buttons == BTN_Y)
+      adjust_flight_speed(-1);
+    else if (speed_buttons == BTN_A)
+      adjust_flight_speed(1);
+  }
   if (!menu_open && floating && (input_pressed() & BTN_RSTICK)) {
     levitate_through_walls = !levitate_through_walls;
     gfx_notice(levitate_through_walls ? "ghost mode on" : "ghost mode off");
@@ -1037,7 +1064,7 @@ void levitate_frame(bool menu_open)
   /* Update after toggles, failed searches and scene changes as well as normal steps.
    * Our input reads remain raw; only the game's HID wrappers mask these buttons. */
   input_hide_from_game = (levitate_enabled ? BTN_LSTICK : 0) |
-                         (floating ? BTN_RSTICK | BTN_X | BTN_B : 0);
+                         (floating ? BTN_RSTICK | BTN_X | BTN_B | BTN_Y | BTN_A : 0);
   /* Hover owns horizontal movement; keep the right stick available to the camera. */
   input_hide_sticks_from_game = floating ? INPUT_HIDE_LEFT_STICK : 0;
 }

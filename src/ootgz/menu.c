@@ -382,10 +382,51 @@ static void activate(menu_item_t *item)
 
 /* --- input ----------------------------------------------------------------------------------- */
 
+/* Left-stick navigation is converted into the same one-direction repeat events
+ * as the D-pad, but only while menu_input is being processed. A large axis
+ * threshold and dominant-axis selection avoid diagonal double inputs and drift. */
+#define MENU_STICK_THRESHOLD 19000
+#define MENU_STICK_FIRST_DELAY 12
+#define MENU_STICK_REPEAT_INTERVAL 3
+static uint32_t stick_nav_fired;
+static uint32_t stick_nav_held;
+static int stick_nav_countdown;
+
+static void update_stick_navigation(void)
+{
+  int32_t lx, ly, rx, ry;
+  input_sticks(&lx, &ly, &rx, &ry);
+  (void)rx;
+  (void)ry;
+  int32_t ax = lx < 0 ? -lx : lx;
+  int32_t ay = ly < 0 ? -ly : ly;
+  uint32_t direction = 0;
+  if (ax >= MENU_STICK_THRESHOLD || ay >= MENU_STICK_THRESHOLD) {
+    if (ax > ay)
+      direction = lx < 0 ? BTN_DLEFT : BTN_DRIGHT;
+    else
+      direction = ly < 0 ? BTN_DDOWN : BTN_DUP;
+  }
+  stick_nav_fired = 0;
+  if (direction != stick_nav_held) {
+    stick_nav_held = direction;
+    stick_nav_countdown = MENU_STICK_FIRST_DELAY;
+    stick_nav_fired = direction;
+  } else if (direction && --stick_nav_countdown <= 0) {
+    stick_nav_countdown = MENU_STICK_REPEAT_INTERVAL;
+    stick_nav_fired = direction;
+  }
+}
+
+static bool menu_nav_repeat(uint32_t button)
+{
+  return input_repeat(button) || (stick_nav_fired & button) != 0;
+}
+
 /* L remains a fast-step modifier; A consistently performs the number's action. */
 static bool number_input(menu_item_t *item)
 {
-  int dir = input_repeat(BTN_DLEFT) ? -1 : input_repeat(BTN_DRIGHT) ? 1 : 0;
+  int dir = menu_nav_repeat(BTN_DLEFT) ? -1 : menu_nav_repeat(BTN_DRIGHT) ? 1 : 0;
   if (dir) {
     change(item, dir * ((input_held() & BTN_L) ? NUMBER_BIG_STEP : 1));
     return true;
@@ -400,9 +441,9 @@ static bool number_input(menu_item_t *item)
 /* a page of text: the page moves, the cursor stays on return (menu_draw keeps the scroll in range) */
 static void scroll_text_input(menu_t *menu, menu_item_t *item)
 {
-  if (input_repeat(BTN_DUP))
+  if (menu_nav_repeat(BTN_DUP))
     menu->scroll--;
-  else if (input_repeat(BTN_DDOWN))
+  else if (menu_nav_repeat(BTN_DDOWN))
     menu->scroll++;
   else if (input_pressed() & BTN_A)
     activate(item);
@@ -413,6 +454,7 @@ void menu_input(void)
   menu_t *menu = menu_current;
   if (!menu || !menu->n_items)
     return;
+  update_stick_navigation();
   if (input_pressed() & BTN_B) {
     menu_back();
     return;
@@ -433,32 +475,32 @@ void menu_input(void)
    * vertical steps between rows, horizontal steps between columns. */
   if (!menu->parent && menu->n_items == 9 && menu->items[0].kind == MI_SUBMENU) {
     int selected = menu->selected;
-    if (input_repeat(BTN_DLEFT) && selected < 8 && (selected & 1))
+    if (menu_nav_repeat(BTN_DLEFT) && selected < 8 && (selected & 1))
       menu->selected = selected - 1;
-    else if (input_repeat(BTN_DRIGHT) && selected < 8 && !(selected & 1))
+    else if (menu_nav_repeat(BTN_DRIGHT) && selected < 8 && !(selected & 1))
       menu->selected = selected + 1;
-    else if (input_repeat(BTN_DUP))
+    else if (menu_nav_repeat(BTN_DUP))
       menu->selected = selected == 8 ? 6 : selected >= 2 ? selected - 2 : selected;
-    else if (input_repeat(BTN_DDOWN))
+    else if (menu_nav_repeat(BTN_DDOWN))
       menu->selected = selected >= 6 ? 8 : selected + 2;
     else if (input_pressed() & BTN_A)
       activate(item);
     return;
   }
   bool has_parts = item->n_parts > 1;
-  if (input_repeat(BTN_DUP)) {
+  if (menu_nav_repeat(BTN_DUP)) {
     if (!item->on_move || !item->on_move(item, -1))
       move_selection(menu, -1);
-  } else if (input_repeat(BTN_DDOWN)) {
+  } else if (menu_nav_repeat(BTN_DDOWN)) {
     if (!item->on_move || !item->on_move(item, 1))
       move_selection(menu, 1);
-  } else if (has_parts && input_repeat(BTN_DLEFT)) {
+  } else if (has_parts && menu_nav_repeat(BTN_DLEFT)) {
     item->part = item->part > 0 ? item->part - 1 : 0;
-  } else if (has_parts && input_repeat(BTN_DRIGHT)) {
+  } else if (has_parts && menu_nav_repeat(BTN_DRIGHT)) {
     item->part = item->part < item->n_parts - 1 ? item->part + 1 : item->n_parts - 1;
-  } else if (input_repeat(BTN_DLEFT)) {
+  } else if (menu_nav_repeat(BTN_DLEFT)) {
     change(item, -1);
-  } else if (input_repeat(BTN_DRIGHT)) {
+  } else if (menu_nav_repeat(BTN_DRIGHT)) {
     change(item, 1);
   } else if (item->press && ((input_pressed() & BTN_A) || (item->press_repeat && input_repeat(BTN_A)))) {
     item->press(item, item->part < item->n_parts ? item->part : 0);
