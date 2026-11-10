@@ -61,7 +61,8 @@ static void adjust_flight_speed(int direction)
       index--;
   }
   levitate_move_speed = flight_speeds[index];
-  gfx_logf("flight speed: %d", levitate_move_speed);
+  log_printf("levitate: flight speed %d", levitate_move_speed);
+  gfx_notice(direction > 0 ? "flight faster" : "flight slower");
 }
 
 /* the physics record: position (3 doubles), then motion state (12 words) */
