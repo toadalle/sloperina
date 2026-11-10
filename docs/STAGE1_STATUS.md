@@ -151,3 +151,7 @@ count as Fritchii runtime validation.
 
 - While hovering, Y lowers and A raises **horizontal** flight speed through the existing 2/4/6/8/12/20/30 units-per-second presets. Both pressed together have no effect. Game actions on Y/A are masked during hover; menu A still confirms selections when open.
 - Practice-menu navigation now accepts the left analog stick in addition to the D-pad with a high dead zone, single dominant axis and key-repeat cadence, including value adjustments and the two-column root grid.
+
+### Confirmed normal-hover collision failure
+
+Fritchii runtime feedback confirms **normal hover (ghost OFF) can force Link through colliders**. Current `respect_walls()` is a heuristic that detects/reconciles some game push-back, but `float_step()` still directly overwrites the physics position record every frame. This is *not* reliable wall collision. Do not describe the non-ghost mode as collision-safe. Codex should identify and use a native controller sweep/slide/shape cast, or move Link through a normal collision-aware physics API; if none can be established, prioritize conservative behavior rather than pretending the push-back heuristic is sufficient. Validate hard corners, thin walls, floors, ceilings, ledges, high flight speed, and transitions. Preserve verified ghost ForceNoHit and explicit camera/action independence.
