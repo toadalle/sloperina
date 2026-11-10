@@ -72,6 +72,7 @@ typedef struct {
   int16_t  x, y;                      /* GFX_CUSTOM: where, in thousandths of the picture */
   bool     clear;                     /* no background (the log; the input display unless it has one) */
   bool     fullscreen;                /* menu: reserve the renderer's full menu canvas */
+  uint32_t menu_rows, menu_focus;      /* row backgrounds and keyboard/controller focus */
   uint8_t  dashboard;                 /* selected item + 1; 0 for a regular text panel */
   uint8_t  pad;                       /* input display: 1 = the controller drawing (nvn.c pad_pixel) */
   int8_t   sticks[4];                 /* ... left x, y, right x, y, -100..100 */
@@ -85,6 +86,8 @@ typedef struct { gfx_panel_t panel[GFX_PANELS]; } gfx_screen_t;
 /* game thread: the menu (panel 0) */
 void gfx_begin(void);
 void gfx_dashboard(int selection);
+void gfx_menu_row(int row, bool focused);
+void gfx_compact(void);
 void gfx_text(int col, int row, gfx_style_t style, const char *s);
 void gfx_end(void);
 void gfx_clear(void);            /* menu closed */

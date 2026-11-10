@@ -102,6 +102,53 @@ static bool history_prefix(const char *line, const char *prefix)
   return !*prefix;
 }
 
+/* Record the phases before a possible stall. The report remains useful even
+ * when a blocked game thread cannot service a user-triggered capture. */
+bool diagnostics_transition_frame(bool active)
+{
+  static char last_map[GD_STR_LEN], last_next[GD_STR_LEN];
+  static bool last_active, waiting_logged;
+  static unsigned poll;
+  static uint64_t start;
+  if (active == last_active && ++poll < 8)
+    return false;
+  poll = 0;
+  const char *map = gd_get_str(GD_STR_MAP), *next = gd_get_str(GD_STR_NEXT_MAP);
+  if (!map)
+    map = "";
+  if (!next)
+    next = "";
+  unsigned i = 0;
+  while (i < GD_STR_LEN - 1 && map[i] && map[i] == last_map[i])
+    i++;
+  bool changed = map[i] != last_map[i];
+  i = 0;
+  while (i < GD_STR_LEN - 1 && next[i] && next[i] == last_next[i])
+    i++;
+  changed |= next[i] != last_next[i];
+  uint64_t now = sys_tick();
+  if (active && !last_active) {
+    start = now;
+    waiting_logged = false;
+  }
+  bool waiting = active && !waiting_logged && now - start > sys_tick_freq() * 5;
+  if (!changed && active == last_active && !waiting)
+    return false;
+  snprintf(last_map, sizeof(last_map), "%.63s", map);
+  snprintf(last_next, sizeof(last_next), "%.63s", next);
+  log_printf("transition: %s frame=%u map=%.23s next=%.23s",
+             waiting ? "waiting >5s" : active ? "active" : last_active ? "released" : "map state",
+             frame_counter(), last_map, last_next);
+  if (active || last_active) {
+    uint32_t counts[4];
+    if (pause_transition_counts(counts))
+      log_printf("transition: requests load=%u scene=%u event=%u system=%u", counts[0], counts[1], counts[2], counts[3]);
+  }
+  waiting_logged |= waiting;
+  last_active = active;
+  return true;
+}
+
 static void sample_history(void)
 {
   append("\nRecent physics and pause log entries (newest first)\n");
@@ -111,7 +158,7 @@ static void sample_history(void)
     if (!line)
       break;
     if ((history_prefix(line, "levitate:") && !history_prefix(line, "levitate: testing")) ||
-        history_prefix(line, "levitate f") ||
+        history_prefix(line, "transition:") ||
         history_prefix(line, "walls:") || history_prefix(line, "menu pause:")) {
       append("%.*s\n", LOG_LINE_LEN, line);
       kept++;

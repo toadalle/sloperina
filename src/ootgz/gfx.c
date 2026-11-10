@@ -59,6 +59,17 @@ void gfx_begin(void)
   menu_open = true;
 }
 
+void gfx_compact(void) { menu_panel.fullscreen = false; }
+
+void gfx_menu_row(int row, bool focused)
+{
+  if (row < 0 || row >= GFX_ROWS)
+    return;
+  menu_panel.menu_rows |= 1u << row;
+  if (focused)
+    menu_panel.menu_focus |= 1u << row;
+}
+
 void gfx_dashboard(int selection)
 {
   menu_panel.dashboard = (uint8_t)(selection + 1);
@@ -341,6 +352,8 @@ static void measure_panel(gfx_panel_t *panel)
   hash = hash_mix(hash, (uint32_t)panel->pad << 9 ^ (uint32_t)panel->clicks << 10 ^
                           (uint32_t)(uint8_t)panel->yoff << 12 ^ (uint32_t)panel->scale_pct << 16);
   hash = hash_mix(hash, panel->dashboard);
+  hash = hash_mix(hash, panel->menu_rows);
+  hash = hash_mix(hash, panel->menu_focus);
   for (int i = 0; i < 4; i++) /* the sticks are drawn from these */
     hash = hash_mix(hash, (uint8_t)panel->sticks[i]);
   for (int r = 0; r < GFX_ROWS; r++)

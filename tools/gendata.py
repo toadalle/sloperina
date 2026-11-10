@@ -405,7 +405,7 @@ def write_warps(out, warps, starters):
     return maps, spawns
 
 
-def write_airwalls(out, airwall_maps):
+def write_airwalls(out, airwall_maps, scene_maps):
     """Air walls (airwalls.json, from tools/airwalls.py): per map, the walls with their shapes.
 
     Returns (walls, maps)."""
@@ -413,22 +413,27 @@ def write_airwalls(out, airwall_maps):
     out.write("const airshape_t data_airshapes[] = {")
     walls, maps = [], []
     n_shapes = 0
-    for name in sorted(airwall_maps):
-        first_wall = len(walls)
-        for wall in airwall_maps[name]:
-            first_shape = n_shapes
-            for shape in wall["shapes"]:
-                if shape["type"] == "box":
-                    shape_type = SHAPE_BOX
-                    a, b, radius = shape["center"], shape["half"], 0.0
-                else:
-                    shape_type = SHAPE_CYLINDER
-                    a, b, radius = shape["a"], shape["b"], shape["radius"]
-                out.write(f"  {{ {shape_type}, {c_vec3(a)}, {c_vec3(b)}, {c_float(radius)} }},")
-                n_shapes += 1
-            kind = WALL_STOPS_PLAYER if wall.get("mask") in PLAYER_MASKS else WALL_IGNORES_PLAYER
-            walls.append((wall["t"], wall["r"], wall["s"], first_shape, n_shapes - first_shape, kind))
-        maps.append((name, first_wall, len(walls) - first_wall))
+    scene_kind = {"loading": 2, "void": 3, "hitbox": 4}
+    scene = []
+    for source, index in ((airwall_maps, maps), (scene_maps, scene)):
+        for name in sorted(source):
+            first_wall = len(walls)
+            for wall in source[name]:
+                first_shape = n_shapes
+                for shape in wall["shapes"]:
+                    if shape["type"] == "box":
+                        shape_type = SHAPE_BOX
+                        a, b, radius = shape["center"], shape["half"], 0.0
+                    else:
+                        shape_type = SHAPE_CYLINDER
+                        a, b, radius = shape["a"], shape["b"], shape["radius"]
+                    out.write(f"  {{ {shape_type}, {c_vec3(a)}, {c_vec3(b)}, {c_float(radius)} }},")
+                    n_shapes += 1
+                kind = scene_kind[wall["kind"]] if "kind" in wall else (
+                    WALL_STOPS_PLAYER if wall.get("mask") in PLAYER_MASKS else WALL_IGNORES_PLAYER
+                )
+                walls.append((wall["t"], wall["r"], wall["s"], first_shape, n_shapes - first_shape, kind))
+            index.append((name, first_wall, len(walls) - first_wall))
     out.write("};")
     out.write("const airwall_t data_airwalls[] = {")
     for translation, rotation, scale, first_shape, count, kind in walls:
@@ -438,8 +443,12 @@ def write_airwalls(out, airwall_maps):
     out.write("const airmap_t data_airmaps[] = {")
     for name, first_wall, count in maps:
         out.write(f"  {{ {c_string(name)}, {first_wall}, {count} }},")
-    out.end_array("data_airmaps", blank_line=False)
-    return walls, maps
+    out.end_array("data_airmaps")
+    out.write("const airmap_t data_scene_maps[] = {")
+    for name, first_wall, count in scene:
+        out.write(f"  {{ {c_string(name)}, {first_wall}, {count} }},")
+    out.end_array("data_scene_maps", blank_line=False)
+    return walls, set(airwall_maps) | set(scene_maps)
 
 
 def main():
@@ -458,7 +467,7 @@ def main():
     write_bottles_and_abilities(out)
     quests = write_story(out, story)
     maps, spawns = write_warps(out, warps, starters)
-    walls, airwall_maps = write_airwalls(out, read_json("airwalls.json")["maps"])
+    walls, airwall_maps = write_airwalls(out, read_json("airwalls.json")["maps"], read_json("scene_volumes.json")["maps"])
 
     missing = [title for kind, title in ITEM_SCREEN if kind in ("owned",) and title not in out.fields]
     missing += [title for title in GEAR if title not in out.fields]
@@ -466,7 +475,7 @@ def main():
         sys.exit(f"missing fields: {missing}")
     (ROOT / "src/ootgz/data.c").write_text("\n".join(out.lines) + "\n", encoding="utf-8")
     print(f"src/ootgz/data.c: {len(maps)} maps, {len(spawns)} spawns, {len(quests)} quests, "
-          f"{len(walls)} air walls in {len(airwall_maps)} maps")
+          f"{len(walls)} collision volumes in {len(airwall_maps)} maps")
 
 
 if __name__ == "__main__":

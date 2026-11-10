@@ -398,8 +398,7 @@ static void build_link(void)
   menu_item_t *load = menu_add_action(&m_link, "load position (R + d-down)", act_load_position, 0);
   if (load)
     load->hint = "A: put Link back there (same map only)";
-  menu_add_return(&m_link);
-  /* what can only be read, under return after a blank line */
+  /* read-only status after a blank line */
   add_blank_line(&m_link);
   menu_add_heading(&m_link, "position");
   for (int axis = 0; axis < 3; axis++)
@@ -462,7 +461,6 @@ static void build_places(void)
     if (maps_in_category[cat])
       menu_add_submenu(&m_places, data_warp_categories[cat], &m_warp_category[cat]);
   }
-  menu_add_return(&m_places);
   for (int i = 0; i < data_n_warp_maps && i < MAX_WARP_MAPS; i++) {
     const warp_map_t *warp_map = &data_warp_maps[i];
     menu_init(&m_warp_map[i], warp_map->label, warp_map->n + 1);
@@ -471,11 +469,8 @@ static void build_places(void)
       if (item)
         item->data2 = i;
     }
-    menu_add_return(&m_warp_map[i]);
     menu_add_submenu(&m_warp_category[warp_map->category], warp_map->label, &m_warp_map[i]);
   }
-  for (int cat = 0; cat < WC_COUNT; cat++)
-    menu_add_return(&m_warp_category[cat]);
 }
 
 static void build_warps(void)
@@ -484,8 +479,7 @@ static void build_warps(void)
   menu_add_submenu(&m_warps, "places", &m_places);
   menu_add_action(&m_warps, "cancel warp", act_cancel_warp, 0);
   menu_add_check(&m_warps, "arrival cutscenes", get_arrival, set_arrival, 0);
-  menu_add_return(&m_warps);
-  /* what can only be read, under return after a blank line */
+  /* read-only status after a blank line */
   add_blank_line(&m_warps);
   menu_add_text(&m_warps, text_warp_current, 0);
   menu_add_text(&m_warps, text_warp_state, 0);
@@ -517,7 +511,6 @@ static void build_cheats(void)
     menu_add_check(&m_cheats, cheat_names[cheat], get_cheat, set_cheat, cheat);
   }
   menu_add_submenu(&m_cheats, "levitation & ghost", &m_levitate);
-  menu_add_return(&m_cheats);
 }
 
 /* --- inventory: owned items and gear ------------------------------------------------------------- */
@@ -934,7 +927,6 @@ static void build_items(void)
   menu_add_submenu(&m_items, "child items", &m_child_items);
   menu_add_submenu(&m_items, "adult items", &m_adult_items);
   menu_add_submenu(&m_items, "universal", &m_universal);
-  menu_add_return(&m_items);
 
   menu_init(&m_child_items, "child items", 6);
   add_item(&m_child_items, "deku sticks", "deku sticks");
@@ -942,7 +934,6 @@ static void build_items(void)
   add_item(&m_child_items, "fairy slingshot", "fairy slingshot");
   add_item(&m_child_items, "magic beans", "magic bean");
   add_item(&m_child_items, "child trade item", "child trade");
-  menu_add_return(&m_child_items);
 
   menu_init(&m_adult_items, "adult items", 8);
   add_item(&m_adult_items, "fairy bow", "fairy bow");
@@ -957,7 +948,6 @@ static void build_items(void)
   if (hookshot)
     hookshot->data2 = hookshots[1] ? 2 : 1;
   add_item(&m_adult_items, "adult trade item", "adult trade");
-  menu_add_return(&m_adult_items);
 
   bottle_choices[0] = "none";
   for (int i = 0; i < data_n_bottle_contents && i < MAX_CHOICES - 1; i++)
@@ -974,7 +964,6 @@ static void build_items(void)
   for (int bottle = 0; bottle < ARRAY_LEN(bottle_labels); bottle++)
     menu_add_option(&m_universal, bottle_labels[bottle], data_n_bottle_contents + 1, bottle_choices, get_bottle,
                     set_bottle, bottle);
-  menu_add_return(&m_universal);
 }
 
 static void build_ammo(void)
@@ -983,7 +972,6 @@ static void build_ammo(void)
   for (int i = 0; i < data_n_ammo; i++)
     menu_add_number(&m_ammo, data_ammo[i].label, get_ammo, set_ammo, max_ammo, fill_ammo,
                     (intptr_t)&data_ammo[i]);
-  menu_add_return(&m_ammo);
 }
 
 static void build_equipment(void)
@@ -1021,7 +1009,6 @@ static void build_equipment(void)
                                        (intptr_t)data_masks);
   if (masks)
     masks->data2 = data_n_masks; /* one mask at a time, like the trade slots */
-  menu_add_return(&m_equipment);
 }
 
 static void add_upgrade(menu_t *menu, const char *label, upgrade_t upgrade)
@@ -1050,19 +1037,16 @@ static void build_collection(void)
   menu_add_submenu(&m_collection, "ammo capacity", &m_capacity);
   menu_add_submenu(&m_collection, "magic", &m_magic);
   menu_end_group(&m_collection);
-  menu_add_return(&m_collection);
 
   menu_init(&m_capacity, "ammo capacity", 7);
   for (int upgrade = UPG_STICK; upgrade <= UPG_WALLET; upgrade++)
     add_upgrade(&m_capacity, upgrades[upgrade].name, upgrade);
-  menu_add_return(&m_capacity);
 
   menu_init(&m_magic, "magic", 4);
   menu_item_t *magic = menu_add_number(&m_magic, "magic", get_magic, set_magic, max_magic, fill_magic, 0);
   if (magic)
     magic->hint = "d-left/right: change   A: fill (set the meter first)";
   add_upgrade(&m_magic, upgrades[UPG_MAGIC].name, UPG_MAGIC);
-  menu_add_return(&m_magic);
 }
 
 static void build_quest_and_songs(void)
@@ -1075,7 +1059,6 @@ static void build_quest_and_songs(void)
       menu_add_heading(&m_quest, "medallions");
     add_flag(&m_quest, &data_quest_items[i], 0);
   }
-  menu_add_return(&m_quest);
 
   menu_init(&m_songs, "songs", data_n_songs + 3);
   menu_add_heading(&m_songs, "normal songs");
@@ -1084,7 +1067,6 @@ static void build_quest_and_songs(void)
       menu_add_heading(&m_songs, "warp songs");
     add_flag(&m_songs, &data_songs[i], 0);
   }
-  menu_add_return(&m_songs);
 }
 
 /* The dungeon's small keys, if it has any. Their fields are named a little differently from the
@@ -1119,10 +1101,8 @@ static void build_dungeon_items(void)
     for (int k = 0; k < ARRAY_LEN(data_dungeons[d].items); k++)
       add_flag(&m_dungeon[d], &data_dungeons[d].items[k], z64hd_game->vt_map_screen);
     add_small_keys(&m_dungeon[d], data_dungeons[d].label);
-    menu_add_return(&m_dungeon[d]);
     menu_add_submenu(&m_dungeon_items, data_dungeons[d].label, &m_dungeon[d]);
   }
-  menu_add_return(&m_dungeon_items);
 }
 
 static void build_inventory(void)
@@ -1138,7 +1118,6 @@ static void build_inventory(void)
   menu_add_submenu(&m_inventory, "quest items", &m_quest);
   menu_add_submenu(&m_inventory, "songs", &m_songs);
   menu_add_submenu(&m_inventory, "dungeon items", &m_dungeon_items);
-  menu_add_return(&m_inventory);
 
   trade_names[0][0] = "none";
   trade_names[1][0] = "none";
@@ -1225,7 +1204,6 @@ static void build_equips(void)
   menu_init(&m_equips, "equips", 7);
   for (int slot = 0; slot < ARRAY_LEN(worn_slot_names); slot++)
     menu_add_text(&m_equips, text_worn, slot);
-  menu_add_return(&m_equips);
 }
 
 /* --- story ------------------------------------------------------------------------------------------ */
@@ -1283,7 +1261,6 @@ static void build_story(void)
       quest->hint = "d-left/right or A: change stage (applies after a loading zone)";
     }
   }
-  menu_add_return(&m_story);
 }
 
 /* --- watches: the box ---------------------------------------------------------------------------- */
@@ -1811,7 +1788,6 @@ static void fill_watches(void)
   menu_add_action(&m_watches, "start/stop timer", act_timer_toggle, 0);
   menu_add_action(&m_watches, "reset timer", act_timer_reset, 0);
   menu_add_action(&m_watches, "reset lag counter", act_lag_reset, 0);
-  menu_add_return(&m_watches);
   menu_refresh(&m_watches);
   /* the cursor keeps to the same button of whatever row it's now on */
   menu_item_t *selected = &m_watches.items[m_watches.selected];
@@ -1839,7 +1815,6 @@ static void build_watches(void)
       known->hint = "A: add to the list";
     }
   }
-  menu_add_return(&m_watch_add);
 }
 
 /* --- scene ------------------------------------------------------------------------------------ */
@@ -1890,6 +1865,9 @@ static void text_air_wall_link(menu_item_t *it, char *buf, int len)
   snprintf(buf, len, TF("link   %s"), text);
 }
 
+static bool get_scene_volume(menu_item_t *it) { return *(bool *)it->data; }
+static void set_scene_volume(menu_item_t *it, bool on) { *(bool *)it->data = on; }
+
 static void build_scene(void)
 {
   menu_init(&m_scene, "scene", 4);
@@ -1902,23 +1880,33 @@ static void build_scene(void)
     enemy_hp->hint = "a bar and life/max over each enemy";
     enemy_hp->log_label = "enemy health:";
   }
-  menu_add_return(&m_scene);
 
-  menu_init(&m_collision, "collision", 6);
-  menu_add_heading(&m_collision, "air walls");
-  menu_item_t *show = menu_add_check(&m_collision, "show", get_air_walls_shown, set_air_walls_shown, 0);
+  menu_init(&m_collision, "collision", 8);
+  menu_add_heading(&m_collision, "scene overlays");
+  menu_item_t *loading = menu_add_check(&m_collision, "show loading zones", get_scene_volume,
+                                        set_scene_volume, (intptr_t)&loading_zones_shown);
+  menu_item_t *abyss = menu_add_check(&m_collision, "show void zones", get_scene_volume,
+                                       set_scene_volume, (intptr_t)&void_zones_shown);
+  menu_item_t *hitboxes = menu_add_check(&m_collision, "show static hitboxes", get_scene_volume,
+                                          set_scene_volume, (intptr_t)&hitboxes_shown);
+  if (loading)
+    loading->hint = "Green: map entrance trigger volumes";
+  if (abyss)
+    abyss->hint = "Orange: player abyss triggers";
+  if (hitboxes)
+    hitboxes->hint = "Pink: baked object collision boxes. Combat hitboxes are separate";
+  menu_item_t *show = menu_add_check(&m_collision, "show air walls", get_air_walls_shown, set_air_walls_shown, 0);
   if (show) {
     show->hint = "cyan: stop Link   red: he's inside it   violet: other kinds";
     show->log_label = "air walls:";
   }
-  menu_item_t *all_kinds = menu_add_check(&m_collision, "all kinds", get_air_walls_all, set_air_walls_all, 0);
+  menu_item_t *all_kinds = menu_add_check(&m_collision, "include non-player air walls", get_air_walls_all, set_air_walls_all, 0);
   if (all_kinds) {
     all_kinds->hint = "also the walls for enemies, NPCs and objects";
     all_kinds->log_label = "all kinds:";
   }
   menu_add_text(&m_collision, text_air_wall_summary, 0);
   menu_add_text(&m_collision, text_air_wall_link, 0);
-  menu_add_return(&m_collision);
 }
 
 /* --- settings --------------------------------------------------------------------------------- */
@@ -2157,7 +2145,6 @@ static void build_frame_advance(void)
     button->log_label = "frame advance button";
   }
   menu_end_group(&m_frame_advance);
-  menu_add_return(&m_frame_advance);
 }
 
 static void build_input_display(void)
@@ -2188,7 +2175,6 @@ static void build_input_display(void)
     size->log_label = "input display size";
   }
   menu_end_group(&m_input_display);
-  menu_add_return(&m_input_display);
 }
 
 static void build_levitate(void)
@@ -2208,8 +2194,7 @@ static void build_levitate(void)
   if (move)
     move->hint = "Flight speed on all axes. Y decreases / A increases while hovering";
   menu_end_group(&m_levitate);
-  menu_add_return(&m_levitate);
-  /* what can only be read, under return after a blank line */
+  /* read-only status after a blank line */
   menu_add_text(&m_levitate, text_static, (intptr_t) "");
   menu_add_text(&m_levitate, text_levitate, 0);
 }
@@ -2230,7 +2215,7 @@ static void build_settings(void)
   menu_item_t *opacity = menu_add_option(&m_settings, "background opacity", ARRAY_LEN(opacity_names), opacity_names,
                                          get_opacity, set_opacity, 0);
   if (opacity)
-    opacity->hint = "Applies to watches and submenus. The dashboard is opaque";
+    opacity->hint = "Opacity of the gameplay watch panel and input display";
   menu_item_t *pause_world = menu_add_check(&m_settings, "freeze game while open", get_menu_pause_world,
                                              set_menu_pause_world, 0);
   if (pause_world) {
@@ -2238,13 +2223,16 @@ static void build_settings(void)
     pause_world->log_label = "menu world pause";
   }
   menu_end_group(&m_settings);
-  menu_item_t *reset_speed = menu_add_check(&m_settings, "reset flight speed on hover",
+  menu_item_t *reset_speed = menu_add_check(&m_settings, "reset flight speed on hover toggle",
                                              get_reset_flight_speed, set_reset_flight_speed, 0);
   if (reset_speed)
     reset_speed->hint = "Start each L3 hover at 6. Off keeps the last flight speed";
 
+  menu_item_t *mini_hud = menu_add_check(&m_settings, "show gameplay mini-HUD", get_shown,
+                                          set_shown, 0);
+  if (mini_hud)
+    mini_hud->hint = "Show the Sloperina watch panel during gameplay";
   menu_add_submenu(&m_settings, "about", &m_about);
-  menu_add_return(&m_settings);
 
   /* Built here because their settings are persisted; linked from functional categories below. */
   build_frame_advance();
@@ -2437,7 +2425,6 @@ static void build_pause_research(void)
       field->hint = "the game's own value; changing it is an experiment";
   }
   menu_end_group(&m_pause_research);
-  menu_add_return(&m_pause_research);
 }
 
 static void dump_dev_info(menu_item_t *it)
@@ -2454,14 +2441,12 @@ static void build_debug(void)
   menu_add_submenu(&m_debug, "heap", &m_heap);
   menu_add_submenu(&m_debug, "memory", &memview_menu);
   menu_add_submenu(&m_debug, "pause research", &m_pause_research);
-  menu_add_return(&m_debug);
   memview_build(&m_watches);
 
   menu_init(&m_heap, "heap", 7);
   menu_item_t *view = menu_add_action(&m_heap, "view the heap in memory", act_heap_memory, 0);
   if (view)
     view->hint = "A: debug > memory at the start of the heap";
-  menu_add_return(&m_heap);
   add_blank_line(&m_heap);
   for (int line = 0; line < N_HEAP_LINES; line++)
     menu_add_text(&m_heap, text_heap, line);
@@ -2641,7 +2626,6 @@ static void build_log(void)
   }
   for (int row = 0; row < LOG_ROWS; row++)
     menu_add_text(&m_log, text_log, row); /* grey: they can't be selected */
-  menu_add_return(&m_log);
 }
 
 /* --- about, splash, root ------------------------------------------------------------------------- */
@@ -2676,7 +2660,6 @@ static void build_about(void)
   add_blank_line(&m_about);
   menu_add_text(&m_about, text_static, (intptr_t) "practicerom.com/oothd");
   add_blank_line(&m_about);
-  menu_add_return(&m_about);
 }
 
 static menu_t m_debug_tools;
@@ -2689,7 +2672,6 @@ static void build_debug_tools(void)
   menu_add_submenu(&m_debug_tools, "frame advance", &m_frame_advance);
   menu_add_submenu(&m_debug_tools, "diagnostics", &m_debug);
   menu_add_submenu(&m_debug_tools, "logs", &m_log);
-  menu_add_return(&m_debug_tools);
 }
 
 static void build_root(void)
@@ -2703,7 +2685,6 @@ static void build_root(void)
   menu_add_submenu(&menu_root, "story", &m_story);
   menu_add_submenu(&menu_root, "debug tools", &m_debug_tools);
   menu_add_submenu(&menu_root, "settings", &m_settings);
-  menu_add(&menu_root, MI_BACK, "close");
 }
 /* the order matters: menu_init reserves each menu's items from one shared pool */
 void menus_build(void)

@@ -68,12 +68,14 @@ extern const warp_map_t  data_warp_maps[];   extern const int data_n_warp_maps;
 extern const spawn_t     data_spawns[];      extern const int data_n_spawns;
 
 /* air walls (airwalls.json): a wall's world point for a local shape point p is t + R (s * p), with
- * R = Rz Ry Rx from r (radians), as sead's makeR (airwall.py). kind 0 stops Link, 1 doesn't. */
+ * R = Rz Ry Rx from r (radians), as sead's makeR (airwalls.py). */
+enum { VOLUME_BLOCKER, VOLUME_OTHER_WALL, VOLUME_LOADING, VOLUME_VOID, VOLUME_HITBOX };
 typedef struct { uint8_t type; float a[3], b[3]; float radius; } airshape_t; /* box: centre, half; cylinder: a, b, r */
 typedef struct { float t[3], r[3], s[3]; uint16_t first_shape; uint8_t n_shapes, kind; } airwall_t;
 typedef struct { const char *map; uint16_t first, n; } airmap_t;
 extern const airshape_t  data_airshapes[];
 extern const airwall_t   data_airwalls[];
 extern const airmap_t    data_airmaps[];     extern const int data_n_airmaps;
+extern const airmap_t    data_scene_maps[];  extern const int data_n_scene_maps;
 
 #endif

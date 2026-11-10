@@ -10,7 +10,7 @@
 typedef struct menu menu_t;
 typedef struct menu_item menu_item_t;
 
-typedef enum { MI_SUBMENU, MI_ACTION, MI_CHECK, MI_OPTION, MI_NUMBER, MI_TEXT, MI_BACK } menu_item_kind_t;
+typedef enum { MI_SUBMENU, MI_ACTION, MI_CHECK, MI_OPTION, MI_NUMBER, MI_TEXT } menu_item_kind_t;
 
 #define NUM_UNKNOWN INT32_MIN
 
@@ -65,7 +65,7 @@ struct menu {
   int selected, scroll;
   menu_t *parent;
   bool grouping; /* items added now go under the last heading */
-  bool scroll_text; /* a page of text: d-up/down scroll it, L presses the selected item (return) */
+  bool scroll_text; /* a read-only page scrolled by the D-pad */
   int pinned;       /* the first this many items always show at the top; the rest scroll under them */
 };
 
@@ -82,7 +82,6 @@ menu_item_t *menu_add_number(menu_t *m, const char *label, int32_t (*get)(menu_i
                              void (*set)(menu_item_t *, int32_t), int32_t (*max)(menu_item_t *),
                              void (*fill)(menu_item_t *), intptr_t data);
 menu_item_t *menu_add_text(menu_t *m, void (*text)(menu_item_t *, char *, int), intptr_t data);
-menu_item_t *menu_add_return(menu_t *m);
 /* A heading: the items after it are indented, up to the next heading, menu_end_group or return. */
 menu_item_t *menu_add_heading(menu_t *m, const char *label);
 void menu_end_group(menu_t *m);

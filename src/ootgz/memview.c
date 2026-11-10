@@ -368,7 +368,6 @@ void memview_build(menu_t *watches)
       row->edit_hint = "d-l/r: move  d-u/d: change  L on address: watch it";
     }
   }
-  menu_add_return(&memview_menu);
 }
 
 void memview_open(uintptr_t addr, int mw_type)

@@ -14,14 +14,16 @@ available on 1.0.0 where the corresponding fields can be read.
    stick, then close with B or R + Plus while holding a stick off center.
    The held stick should stay suppressed until centered. Plus alone should
    still open the stock pause screen. Test opening from a bumper frame-advance
-   hold and verify that closing returns to the hold. If backdrop capture or
-   native pause is unavailable, the dashboard stays LIVE and reports the
-   fallback. The freeze choice persists under `menu_pause_world`.
+   hold and verify that closing returns to the hold. If backdrop capture
+   fails, native pause still runs and the log reports the capture failure.
+   The game can hide actors during this fallback. If native pause itself
+   is unavailable, the dashboard stays LIVE. Check Settings > Show gameplay
+   mini-HUD to hide or show the mod's watch overlay.
 2. **Flight presets.** Start hover with L3. At low and high presets, compare
    horizontal travel and the distance covered by holding X or B for the same
    time. Y/A step the preset, R + R3 sets it to 6, and X+B holds altitude.
    The base rise speed is the X/B speed at preset 6. Change Settings →
-   Reset flight speed on hover to verify that both reset and retain behavior
+   Reset flight speed on hover toggle to verify that both reset and retain behavior
    survive a restart.
 3. **Recovery.** Hover in place for several seconds in normal and ghost mode,
    then move. In ghost mode, void out, wait until gameplay is back, and press
@@ -29,16 +31,31 @@ available on 1.0.0 where the corresponding fields can be read.
    in progress. The old hover should release at transition, actor replacement,
    or a large relocation. Check for ordinary collision on arrival and capture
    the log if a black screen remains or hover fails to restart.
-4. **Collision outlines.** In Scene → Collision, enable Show. Inspect cyan Link
-   blockers, violet other air walls, and the red inside indicator with a nearby
-   volume. Rotate and approach a wall to check for screen-spanning lines or
-   partial outlines. Try All Kinds and move between maps. The view uses the
-   repository's placed air-wall data, so map meshes and loading/death triggers
-   are outside its coverage.
+4. **Collision outlines.** In Scene > Collision, try the layers separately.
+   Check green loading volumes at the Dodongo's Cavern and Forest Temple
+   entrances, orange player-void volumes near cliff edges, and pink static
+   object hitboxes. Cyan and violet still mark air walls. The counts show
+   exported volumes for the current map. The overlay draws through scenery.
+   It covers box-shaped player void triggers and selected baked physical
+   boxes. Live attacks, moving actor hitboxes, and terrain meshes need
+   separate sources.
 5. **Camera and ledges.** Capture Quick Snapshot in open space, then fly through
    a wall or near a ledge. If the camera or Link gets stuck, immediately take
    another Quick Snapshot, followed by Deep Diagnostics. Include the map,
    route, controls and expected behavior with the two captures.
+
+## Investigating a loading stall
+
+The supplied Dodongo Cavern dump has a grounded Link on the destination map,
+no active transition request, and no mod-owned ghost controller. Its log
+shows ghost collision restored before the transition. This is an arrival
+sample, so it cannot attribute an intermittent stall. The new build writes
+`transition:` breadcrumbs and flushes them to the mod log as map reservations
+and transition pauses change. If the game hangs, copy `sloperinaGZ/log.txt`
+from the virtual SD before restarting. A restart creates a fresh log. Compare
+the same entrance with the mod disabled and with hover off, normal hover and
+ghost enabled. Record whether the screen was black and whether the emulator
+still displayed new frames.
 
 ## Export diagnostics
 

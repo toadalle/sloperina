@@ -183,7 +183,6 @@ void osk_build(void)
                                         : "L: shift / space / backspace / delete / done";
     }
   }
-  menu_add_return(&osk_menu);
 }
 
 void osk_open(const char *title, const char *initial, void (*done)(const char *, intptr_t), intptr_t ctx)

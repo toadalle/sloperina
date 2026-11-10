@@ -22,11 +22,12 @@ float cosf(float x);
 float sqrtf(float x);
 
 bool airwalls_shown, airwalls_all;
+bool loading_zones_shown, void_zones_shown, hitboxes_shown;
 
 #define AW_RANGE 60.0f
-#define MAX_WALLS 256
-#define MAX_POINTS 4096
-#define MAX_EDGES 8192
+#define MAX_WALLS 512
+#define MAX_POINTS 8192
+#define MAX_EDGES 16384
 #define MAX_DOTS 3000
 #define MAX_RECTS_PER_EDGE 64
 #define REF_WIDTH 1920    /* the picture is worked out in pixels of a 1920x1080 one */
@@ -38,7 +39,6 @@ bool airwalls_shown, airwalls_all;
 #define PHYS_Y 0.585f     /* Link's physics position is this far above his drawn one */
 #define FACE_UPRIGHT 0.7f /* a face normal with more height than this points up (or down) */
 
-#define WALL_KIND_BLOCKS 0 /* the kind of wall that stops Link */
 #define SHAPE_BOX 0        /* any other shape type is a cylinder */
 #define CYLINDER_SEGMENTS 16
 #define CYLINDER_SIDE_EVERY 4 /* a side line at every 4th segment: four in all */
@@ -46,7 +46,7 @@ bool airwalls_shown, airwalls_all;
 
 /* --- geometry, worked out once per map ------------------------------------------------------------ */
 
-static const airmap_t *current_map;
+static const airmap_t *current_map, *current_scene;
 static char current_map_name[64];
 static struct {
   float R[9]; /* rotation, row-major */
@@ -60,12 +60,23 @@ static int n_points, n_edges;
 
 static const airwall_t *map_wall(int index)
 {
+  if (current_scene && index < current_scene->n)
+    return &data_airwalls[current_scene->first + index];
+  if (current_scene)
+    index -= current_scene->n;
   return &data_airwalls[current_map->first + index];
 }
 
 static bool wall_shown(const airwall_t *wall)
 {
-  return wall->kind == WALL_KIND_BLOCKS || airwalls_all;
+  switch (wall->kind) {
+    case VOLUME_BLOCKER: return airwalls_shown;
+    case VOLUME_OTHER_WALL: return airwalls_shown && airwalls_all;
+    case VOLUME_LOADING: return loading_zones_shown;
+    case VOLUME_VOID: return void_zones_shown;
+    case VOLUME_HITBOX: return hitboxes_shown;
+    default: return false;
+  }
 }
 
 /* R = Rz Ry Rx for rotation angles (x, y, z) */
@@ -166,13 +177,14 @@ static void bounding_sphere(const airwall_t *wall, int first_point, float centre
   }
 }
 
-static void build_map_geometry(const airmap_t *map)
+static void build_map_geometry(void)
 {
   n_walls = 0;
   n_points = 0;
   n_edges = 0;
-  for (int i = 0; i < map->n && n_walls < MAX_WALLS; i++) {
-    const airwall_t *wall = &data_airwalls[map->first + i];
+  int count = (current_map ? current_map->n : 0) + (current_scene ? current_scene->n : 0);
+  for (int i = 0; i < count && n_walls < MAX_WALLS; i++) {
+    const airwall_t *wall = map_wall(i);
     __typeof__(wall_geo[0]) *geo = &wall_geo[n_walls++];
     rotation_matrix(wall->r, geo->R);
     geo->first_edge = (uint16_t)n_edges;
@@ -187,7 +199,7 @@ static void build_map_geometry(const airmap_t *map)
     geo->n_edges = (uint16_t)(n_edges - geo->first_edge);
     bounding_sphere(wall, first_point, geo->centre, &geo->radius);
   }
-  log_printf("air walls: %s: %d walls, %d edges", map->map, n_walls, n_edges);
+  log_printf("collision: %s: %d volumes, %d edges", current_map_name, n_walls, n_edges);
 }
 
 static bool str_equal(const char *a, const char *b)
@@ -204,21 +216,26 @@ static void update_map(void)
 {
   const char *name = gd_get_str(GD_STR_MAP);
   if (!name || !name[0]) {
-    current_map = 0;
+    current_map = current_scene = 0;
+    current_map_name[0] = 0;
+    n_walls = 0;
     return;
   }
-  if (current_map && str_equal(current_map_name, name))
+  if (str_equal(current_map_name, name))
     return;
   snprintf(current_map_name, sizeof(current_map_name), "%s", name);
-  current_map = 0;
+  current_map = current_scene = 0;
   for (int i = 0; i < data_n_airmaps; i++)
     if (str_equal(data_airmaps[i].map, name)) {
       current_map = &data_airmaps[i];
-      build_map_geometry(current_map);
       break;
     }
-  if (!current_map)
-    n_walls = 0;
+  for (int i = 0; i < data_n_scene_maps; i++)
+    if (str_equal(data_scene_maps[i].map, name)) {
+      current_scene = &data_scene_maps[i];
+      break;
+    }
+  build_map_geometry();
 }
 
 /* --- Link inside a wall (airwall.py inside()) ------------------------------------------------------- */
@@ -280,7 +297,8 @@ static void check_link(void)
   float P[3] = { drawn.x, drawn.y + PHYS_Y, drawn.z };
   float best = 0;
   for (int i = 0; i < n_walls; i++) {
-    if (!wall_shown(map_wall(i)))
+    const airwall_t *wall = map_wall(i);
+    if (wall->kind != VOLUME_BLOCKER && !(airwalls_all && wall->kind == VOLUME_OTHER_WALL))
       continue;
     float dx = P[0] - wall_geo[i].centre[0];
     float dy = P[1] - wall_geo[i].centre[1];
@@ -315,7 +333,6 @@ void airwall_link_text(char *buf, int len)
 static aw_dot_t dots[2][MAX_DOTS];
 static int n_dots[2];
 static volatile int published = -1; /* the buffer to draw, or -1 for none */
-static int n_walls_near;
 
 /* 0..size to 0..65535, clamped */
 static uint16_t to_unit16(float v, float size)
@@ -527,18 +544,22 @@ void airwall_frame(bool menu_open)
   check_link();
   int next = published == 0 ? 1 : 0;
   int n = 0;
-  n_walls_near = 0;
-  bool draw = airwalls_shown && current_map && !menu_open && !game_is_paused();
+  bool enabled = airwalls_shown || loading_zones_shown || void_zones_shown || hitboxes_shown;
+  bool draw = enabled && n_walls && !menu_open && !game_is_paused();
   view_cam_t cam;
   if (draw && view_camera(&cam)) {
     /* nearest wall first, so the dot budget goes to what's close */
-    n_walls_near = sort_near_walls(&cam);
+    int n_walls_near = sort_near_walls(&cam);
     for (int k = 0; k < n_walls_near && n < MAX_DOTS; k++) {
       int i = near_order[k];
       /* Publish a whole visible volume or stop at the last complete one. */
       int start = n;
       const airwall_t *wall = map_wall(i);
-      uint8_t color = i == link_wall ? AW_INSIDE : wall->kind == WALL_KIND_BLOCKS ? AW_BLOCKS : AW_OTHER;
+      static const uint8_t colors[] = {
+        [VOLUME_BLOCKER] = AW_BLOCKS, [VOLUME_OTHER_WALL] = AW_OTHER,
+        [VOLUME_LOADING] = AW_LOADING, [VOLUME_VOID] = AW_VOID, [VOLUME_HITBOX] = AW_HITBOX,
+      };
+      uint8_t color = i == link_wall ? AW_INSIDE : colors[wall->kind];
       for (int e = wall_geo[i].first_edge; n < MAX_DOTS && e < wall_geo[i].first_edge + wall_geo[i].n_edges; e++)
         add_edge_dots(dots[next], &n, &cam, points[edges[e][0]], points[edges[e][1]], color);
       if (n == MAX_DOTS) {
@@ -560,8 +581,10 @@ const aw_dot_t *airwall_published(int *n)
 
 void airwall_summary(char *buf, int len)
 {
-  if (!current_map)
-    snprintf(buf, len, TF("no air walls in this map"));
-  else
-    snprintf(buf, len, "%d walls here, %d within %.0f", n_walls, n_walls_near, (double)AW_RANGE);
+  int counts[VOLUME_HITBOX + 1] = {0};
+  for (int i = 0; i < n_walls; i++)
+    counts[map_wall(i)->kind]++;
+  snprintf(buf, len, TF("air %d   load %d   void %d   boxes %d"),
+           counts[VOLUME_BLOCKER] + counts[VOLUME_OTHER_WALL],
+           counts[VOLUME_LOADING], counts[VOLUME_VOID], counts[VOLUME_HITBOX]);
 }

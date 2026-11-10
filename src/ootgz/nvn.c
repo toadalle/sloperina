@@ -892,6 +892,18 @@ static uint8_t dashboard_background(const gfx_panel_t *panel, int x, int y)
   return selected ? PAL_CARD_SELECTED : PAL_CARD;
 }
 
+static uint8_t menu_row_background(const gfx_panel_t *panel, int x, int y)
+{
+  if (x < 2 * FONT_W || x >= GFX_COLS * FONT_W || y < TEXT_TOP)
+    return 0;
+  int row = (y - TEXT_TOP) / CELL_H;
+  if (row >= GFX_ROWS || !(panel->menu_rows & (1u << row)))
+    return 0;
+  if (!(panel->menu_focus & (1u << row)))
+    return PAL_CARD;
+  return x < 2 * FONT_W + 2 ? PAL_CARD_ACCENT : PAL_CARD_SELECTED;
+}
+
 /* Opaque: write the panel straight into a buffer in the picture's format. Rows are built in a
  * cached line buffer and then copied to the (uncached) pool memory. */
 #define MAX_PANEL_W PANEL_W(GFX_COLS, MAX_SCALE * SC_ONE)
@@ -908,8 +920,10 @@ static void rasterise(const gfx_panel_t *panel, uint8_t *dst, int scale, int w, 
   for (int y = 0; y < h; y++) {
     for (int x = 0; x < w; x++) {
       uint8_t pixel = panel_pixel(panel, x, y, scale);
-      if (!pixel && panel->dashboard)
-        pixel = dashboard_background(panel, x * SC_ONE / scale, y * SC_ONE / scale);
+      if (!pixel && panel->fullscreen) {
+        int fx = x * SC_ONE / scale, fy = y * SC_ONE / scale;
+        pixel = panel->dashboard ? dashboard_background(panel, fx, fy) : menu_row_background(panel, fx, fy);
+      }
       uint64_t colour = encoded[pixel];
       if (bytes_per_pixel == 8) {
         memcpy(row_buffer + x * 8, &colour, 8);
@@ -1186,7 +1200,10 @@ static void compose_see_through(int p, uint8_t *dst, const uint8_t *under, int u
 static const float airwall_colours[AW_NCOLORS][4] = {
   [AW_BLOCKS] = { 0.23f, 0.84f, 1.0f, 1.0f }, /* cyan: stops Link */
   [AW_INSIDE] = { 1.0f, 0.28f, 0.28f, 1.0f }, /* red: Link is inside it */
-  [AW_OTHER] = { 0.60f, 0.55f, 1.0f, 1.0f },  /* violet: other kinds */
+  [AW_OTHER] = { 0.60f, 0.55f, 1.0f, 1.0f },  /* violet: other air walls */
+  [AW_LOADING] = { 0.30f, 1.0f, 0.51f, 1.0f },
+  [AW_VOID] = { 1.0f, 0.59f, 0.24f, 1.0f },
+  [AW_HITBOX] = { 1.0f, 0.46f, 0.83f, 1.0f },
 };
 
 /* enemy health (enemyhp.c) */
@@ -1365,12 +1382,9 @@ static void place_panel(int p, const gfx_panel_t *panel, const frame_t *frame, i
   int x = margin;
   int y = margin;
   if (p == PANEL_MENU) {
-    if (panel->dashboard) {
+    if (panel->fullscreen) {
       x = (area.w - w) / 2;
       y = (area.h - h) / 2;
-    } else if (panel->fullscreen) {
-      x = margin;
-      y = margin;
     } else {
       x = area.w * MENU_X_PERMILLE / 1000;
       y = frame->menu_y;
@@ -1531,10 +1545,10 @@ static uint32_t captured_token;
 static int capture_slot;
 static bool capture_complete;
 
-static void freeze_fail(uint32_t token)
+static void freeze_fail(uint32_t token, const char *reason)
 {
-  if (token)
-    __atomic_store_n(&gfx_freeze_failed, token, __ATOMIC_RELEASE);
+  if (token && __atomic_exchange_n(&gfx_freeze_failed, token, __ATOMIC_RELEASE) != token)
+    log_printf("menu pause: backdrop unavailable (%s)", reason);
 }
 
 static bool freeze_prepare(uint32_t token, nvn_queue_t *queue, nvn_rect_t area)
@@ -1544,12 +1558,12 @@ static bool freeze_prepare(uint32_t token, nvn_queue_t *queue, nvn_rect_t area)
   nvn_region_t region = { area.x, area.y, 0, area.w, area.h, 1 };
   if (captured_token == token) {
     if (queue != freeze_queue || !same_region(&region, &freeze_region)) {
-      freeze_fail(token);
+      freeze_fail(token, "presentation region changed");
       return false;
     }
     if (!capture_complete) {
       if (!slot_finished(capture_slot)) {
-        freeze_fail(token);
+        freeze_fail(token, "capture fence did not finish");
         return false;
       }
       capture_complete = true;
@@ -1560,7 +1574,7 @@ static bool freeze_prepare(uint32_t token, nvn_queue_t *queue, nvn_rect_t area)
 
   size_t needed = (size_t)region.w * region.h * bytes_per_pixel;
   if (!needed || needed > FREEZE_BYTES_MAX) {
-    freeze_fail(token);
+    freeze_fail(token, "capture dimensions exceed limit");
     return false;
   }
   if (!freeze_capacity) {
@@ -1569,13 +1583,13 @@ static bool freeze_prepare(uint32_t token, nvn_queue_t *queue, nvn_rect_t area)
     if (!mem || !make_pool(&freeze_pool, mem, size, POOL_CPU_UNCACHED | POOL_GPU_UNCACHED)) {
       if (mem)
         free(mem);
-      freeze_fail(token);
+      freeze_fail(token, "capture pool allocation failed");
       return false;
     }
     freeze_capacity = size;
   }
   if (needed > freeze_capacity || (freeze_queue && freeze_queue != queue && !wait_gpu_idle())) {
-    freeze_fail(token);
+    freeze_fail(token, "capture pool cannot be reused");
     return false;
   }
   freeze_queue = queue;
@@ -1592,7 +1606,7 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
   const aw_dot_t *hp = enemyhp_published(&n_hp);
   int pause_icon = gfx_pause_icon;
   if (overlay_state == OV_FAILED) {
-    freeze_fail(token);
+    freeze_fail(token, "overlay renderer disabled");
     return;
   }
   if (!screen && !n_dots && !n_hp && !pause_icon && !token)
@@ -1602,11 +1616,11 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
     if (!warned)
       log_printf("present of texture %d, but %d swapchain textures seen", index, swapchain_texture_count);
     warned = true;
-    freeze_fail(token);
+    freeze_fail(token, "swapchain image unavailable");
     return;
   }
   if (overlay_state == OV_NONE && !overlay_init()) {
-    freeze_fail(token);
+    freeze_fail(token, "overlay renderer initialization failed");
     return;
   }
   nvn_texture_t *tex = swapchain_textures[index];
@@ -1616,7 +1630,7 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
     if (!warned_format)
       log_printf("swapchain format changed to %d; not drawing", fn.tex_format(tex));
     warned_format = true;
-    freeze_fail(token);
+    freeze_fail(token, "swapchain format changed");
     return;
   }
   frame_t frame;
@@ -1624,11 +1638,20 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
   log_area_change(frame.area, tw, th);
   frame.scale = menu_scale_for(frame.area);
   frame.margin = MARGIN_FONT_PX * frame.scale / SC_ONE;
+  int menu_scale = frame.scale;
+  int fit_w = (frame.area.w - frame.margin * 2) * SC_ONE / PANEL_W(GFX_COLS, SC_ONE);
+  int fit_h = (frame.area.h - frame.margin * 2) * SC_ONE / PANEL_H(GFX_ROWS, SC_ONE);
+  if (menu_scale > fit_w)
+    menu_scale = fit_w;
+  if (menu_scale > fit_h)
+    menu_scale = fit_h;
+  if (menu_scale < SC_ONE)
+    menu_scale = SC_ONE;
   bool full_menu = screen && screen->panel[PANEL_MENU].rows && screen->panel[PANEL_MENU].fullscreen;
   frame.menu_y = full_menu ? frame.margin : frame.area.h * MENU_Y_PERMILLE / 1000;
   /* Size backing storage for the large canvas even if another overlay initializes it first. */
   int menu_space = frame.area.h - frame.margin * 2;
-  int fit = (menu_space * SC_ONE / frame.scale - FONT_H) / CELL_H;
+  int fit = (menu_space * SC_ONE / menu_scale - FONT_H) / CELL_H;
   gfx_menu_rows = fit < MIN_MENU_ROWS ? MIN_MENU_ROWS : fit > GFX_ROWS ? GFX_ROWS : fit;
 
   bool freeze = freeze_prepare(token, queue, frame.area);
@@ -1666,6 +1689,8 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
       rows = panel_max_rows[p];
     /* a panel can be drawn smaller than the menu (the input display's size), not below 1x */
     int scale = panel->scale_pct ? frame.scale * panel->scale_pct / 100 : frame.scale;
+    if (p == PANEL_MENU && panel->fullscreen)
+      scale = menu_scale;
     if (scale < SC_ONE)
       scale = SC_ONE;
     int w = PANEL_W(cols, scale);
@@ -1700,7 +1725,7 @@ static void draw_overlay(nvn_queue_t *queue, nvn_window_t *window, int index)
       n++;
       continue;
     }
-    if (frame.see_through && !panel->dashboard) {
+    if (frame.see_through && p != PANEL_MENU) {
       nvn_rect_t placed = { x, y, w, h };
       if (!plan_see_through_panel(draw, p, panel, cols, rows, placed, scale, &frame))
         continue;

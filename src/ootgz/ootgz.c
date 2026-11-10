@@ -14,6 +14,8 @@
  */
 #include "cheats.h"
 #include "gamedata.h"
+#include "diagnostics.h"
+#include "pause.h"
 #include "gfx.h"
 #include "input.h"
 #include "job.h"
@@ -156,8 +158,13 @@ static fa_event_t fa_read_button(void)
 /* Opens, closes and drives the menu. Returns true if the input was the menu's. */
 static bool menu_controls(void)
 {
-  if (!menu_current && input_combo(PRACTICE_MENU_COMBO))
+  if (!menu_current && input_combo(PRACTICE_MENU_COMBO)) {
+    if (gd_game_paused(0, 0) || pause_transition_active()) {
+      input_suppress_until_release(PRACTICE_MENU_COMBO);
+      return true; /* Leave native pause screens and transitions to the game. */
+    }
     menu_open(&menu_root);
+  }
   else if (menu_current && input_combo(PRACTICE_MENU_COMBO))
     menu_close(); /* the open combo toggles it */
   else if (menu_current) {
@@ -270,7 +277,7 @@ static void fa_hold_game(void)
     watches_frame(input_menu_releasing());
     gfx_frame();
     settings_frame(menu_current != 0);
-    settings_log_frame();
+    settings_log_frame(false);
     /* does the picture still get presented? */
     if (!logged && sys_tick() - paused_at > sys_tick_freq()) {
       logged = true;
@@ -332,29 +339,39 @@ static void frame(void)
   }
   frames_run++;
   input_update();
+  bool transition = pause_transition_active();
+  bool flush_log = diagnostics_transition_frame(transition);
+  if (transition && menu_current)
+    menu_close();
 
   fa_menu_was_open = menu_current != 0; /* an L that closes the menu isn't frame advance's */
-  menu_controls();
+  if (!transition)
+    menu_controls();
   if (menu_current) {
     watches_sync();
     menu_draw();
   }
-  airwall_frame(menu_current != 0);
-  enemyhp_frame();
+  airwall_frame(menu_current || transition);
+  enemyhp_frame(menu_current || transition);
   menus_research_frame();
   bool menu_owns_input = menu_current || input_menu_releasing();
-  watches_frame(menu_owns_input);
+  if (!transition)
+    watches_frame(menu_owns_input);
   levitate_frame(menu_owns_input);
-  position_frame(menu_owns_input);
+  if (!transition)
+    position_frame(menu_owns_input);
   warp_frame();
   gfx_frame();
 
-  cheats_frame();
-  pouch_frame();
-  job_frame();
-  settings_frame(menu_current != 0);
-  settings_log_frame();
-  fa_frame(); /* last: the frame's work is done before the game is held */
+  if (!transition) {
+    cheats_frame();
+    pouch_frame();
+    job_frame();
+    settings_frame(menu_current != 0);
+  }
+  settings_log_frame(flush_log);
+  if (!transition)
+    fa_frame(); /* last: the frame's work is done before the game is held */
 }
 
 /* Called by the IPS stub instead of the GameData unlock (x0 = the lock), on the game's thread.

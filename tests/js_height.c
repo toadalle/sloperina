@@ -12,6 +12,7 @@
 #include "sdfs.h"
 #include "link.h"
 #include "gfx.h"
+#include "input.h"
 #include "font.h"
 #include "cheats.h"
 #include "z64hd.h"
@@ -24,7 +25,7 @@ static const struct z64hd_build test_build; /* no build: the version-specific pa
 const struct z64hd_build *z64hd_game = &test_build;
 bool enemy_hp_shown;
 bool cheats[CHEAT_COUNT], frame_advance, pause_display, warp_arrival_cutscenes;
-bool levitate_enabled, levitate_through_walls, airwalls_shown, airwalls_all;
+bool levitate_enabled, levitate_through_walls, loading_zones_shown, void_zones_shown, hitboxes_shown, airwalls_shown, airwalls_all;
 bool levitate_reset_speed = true;
 int frame_advance_button, levitate_speed = 5, levitate_move_speed = 5;
 
@@ -96,7 +97,8 @@ uint32_t frame_counter(void) { return 0; }
 uint64_t sys_tick(void) { return 1; }
 uint64_t sys_tick_freq(void) { return 1000; }
 uint32_t input_held(void) { return 0; }
-uint32_t input_pressed(void) { return 0; }
+static uint32_t menu_pressed;
+uint32_t input_pressed(void) { return menu_pressed; }
 bool input_repeat(uint32_t button) { (void)button; return false; }
 void input_set_menu_block(bool block) { (void)block; }
 bool input_combo(uint32_t mask) { (void)mask; return false; }
@@ -105,6 +107,7 @@ static bool test_pause_owned;
 bool pause_menu_acquire(void) { return test_pause_owned = true; }
 void pause_menu_release(void) { test_pause_owned = false; }
 bool pause_menu_owned(void) { return test_pause_owned; }
+bool pause_transition_active(void) { return false; }
 void input_sticks(int32_t *a, int32_t *b, int32_t *c, int32_t *d) { *a = *b = *c = *d = 0; }
 const char *gd_get_str(int field) { (void)field; return "test"; }
 void airwall_link_text(char *buf, int len) { snprintf(buf, len, "outside"); }
@@ -324,7 +327,7 @@ static void test_menu_freeze(void)
 {
   menu_t root = {0};
   menu_init(&root, "freeze test", 1);
-  menu_add_return(&root);
+  menu_add(&root, MI_ACTION, "item");
   menu_set_pause_world(true);
   menu_open(&root);
   uint32_t token = gfx_freeze_request;
@@ -334,9 +337,9 @@ static void test_menu_freeze(void)
   assert(test_pause_owned);
   gfx_freeze_failed = token;
   menu_draw();
-  assert(!test_pause_owned && !gfx_freeze_request);
+  assert(test_pause_owned && !gfx_freeze_request);
   menu_draw();
-  assert(!gfx_freeze_request); /* fallback remains live for this session */
+  assert(test_pause_owned && !gfx_freeze_request); /* native pause survives capture failure */
   menu_close();
 
   menu_open(&root);
@@ -347,7 +350,7 @@ static void test_menu_freeze(void)
   menu_set_pause_world(false);
   assert(!test_pause_owned && !gfx_freeze_request);
   menu_close();
-  puts("PASS: menu waits for its backdrop, releases on failure or live mode, and recaptures on reopen");
+  puts("PASS: menu waits for its backdrop, uses native fallback and releases in live mode, and recaptures on reopen");
 }
 
 static void test_menu_filler(const char *image)
@@ -374,6 +377,15 @@ static void test_menu_filler(const char *image)
       }
     }
   assert(fillers > 0);
+  assert(p->fullscreen && p->menu_rows && p->menu_focus);
+  menu_t child = { .title = "empty page", .parent = &m };
+  menu_goto(&child);
+  menu_pressed = BTN_B;
+  menu_input();
+  assert(menu_current == &m);
+  menu_input();
+  assert(!menu_current);
+  menu_pressed = 0;
   render_panel(p, image);
   menu_current = NULL;
   gfx_clear();

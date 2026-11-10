@@ -8,6 +8,6 @@
 
 void settings_load(void);            /* first frame: mount the SD card, read the file */
 void settings_frame(bool menu_open); /* save if anything changed */
-void settings_log_frame(void);       /* writes the log file (sd:/sloperinaGZ/log.txt) */
+void settings_log_frame(bool flush_now);       /* writes the log file (sd:/sloperinaGZ/log.txt) */
 
 #endif

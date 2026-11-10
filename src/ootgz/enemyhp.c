@@ -157,11 +157,11 @@ static void log_hits(const enemy_t *enemies, int n)
 
 /* --- frame ------------------------------------------------------------------------------------------ */
 
-void enemyhp_frame(void)
+void enemyhp_frame(bool hidden)
 {
   int next = published == 0 ? 1 : 0;
   int n = 0;
-  if (enemy_hp_shown) {
+  if (enemy_hp_shown && !hidden) {
     enemy_t enemies[MAX_ENEMIES];
     int n_enemies = enemies_read(enemies, MAX_ENEMIES);
     log_hits(enemies, n_enemies);

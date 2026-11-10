@@ -24,7 +24,7 @@ int enemies_read(enemy_t *out, int max);
 /* the colours of the rectangles (nvn.c) */
 enum { EH_BACK, EH_FILL, EH_LOW, EH_TEXT, EH_NCOLORS };
 
-void enemyhp_frame(void);                     /* game thread, once per frame */
+void enemyhp_frame(bool hidden);                     /* game thread, once per frame */
 const aw_dot_t *enemyhp_published(int *n);    /* render thread */
 
 #endif

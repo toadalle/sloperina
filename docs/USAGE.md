@@ -36,7 +36,6 @@ Navigate with the D-pad or left stick. **A** selects and **B** goes back.
 | **A** | Open a menu, tick a box or activate an action |
 | **L held + D-pad left / right** | Change a number by 10 |
 | **B** | Go back one menu or close the dashboard |
-| **return** (the last item) | Go back one menu |
 
 The line at the bottom of the menu always tells you what the buttons do for the item you're on.
 

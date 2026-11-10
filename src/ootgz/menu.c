@@ -16,7 +16,7 @@ static int pool_used;
 menu_t *menu_current;
 static menu_t *menu_last; /* where the menu was when it closed; it reopens there */
 bool menu_pause_world = true;
-static bool menu_pause_owned;
+static bool menu_pause_owned, menu_pause_attempted;
 static uint32_t freeze_serial, freeze_token;
 static uint64_t freeze_started;
 
@@ -47,7 +47,7 @@ menu_item_t *menu_add(menu_t *menu, menu_item_kind_t kind, const char *label)
   memset(item, 0, sizeof(*item));
   item->kind = kind;
   item->label = label;
-  item->indent = menu->grouping && kind != MI_BACK;
+  item->indent = menu->grouping;
   return item;
 }
 
@@ -136,11 +136,6 @@ menu_item_t *menu_add_heading(menu_t *menu, const char *label)
 
 void menu_end_group(menu_t *menu) { menu->grouping = false; }
 
-menu_item_t *menu_add_return(menu_t *menu)
-{
-  return menu_add(menu, MI_BACK, "return");
-}
-
 /* --- selection and navigation ---------------------------------------------------------------- */
 
 static bool selectable(const menu_item_t *item) { return item->kind != MI_TEXT; }
@@ -205,10 +200,11 @@ void menu_edit(menu_item_t *item) { menu_editing = item; }
 
 static void menu_update_pause(void)
 {
-  if (!menu_current || !menu_pause_world) {
+  if (!menu_current || !menu_pause_world || pause_transition_active()) {
     if (menu_pause_owned)
       pause_menu_release();
     menu_pause_owned = false;
+    menu_pause_attempted = false;
     freeze_token = 0;
     __atomic_store_n(&gfx_freeze_request, 0, __ATOMIC_RELEASE);
     return;
@@ -218,20 +214,20 @@ static void menu_update_pause(void)
     freeze_started = sys_tick();
     __atomic_store_n(&gfx_freeze_request, freeze_token, __ATOMIC_RELEASE);
   }
-  if (!__atomic_load_n(&gfx_freeze_request, __ATOMIC_ACQUIRE))
-    return; /* Fall back to live for the rest of this menu session. */
   bool ready = __atomic_load_n(&gfx_freeze_ready, __ATOMIC_ACQUIRE) == freeze_token;
   bool failed = __atomic_load_n(&gfx_freeze_failed, __ATOMIC_ACQUIRE) == freeze_token;
-  if (!failed && ready && !menu_pause_owned) {
-    menu_pause_owned = pause_menu_acquire();
-    failed = !menu_pause_owned;
-  }
-  if (failed || (!ready && sys_tick() - freeze_started > sys_tick_freq())) {
-    if (menu_pause_owned)
-      pause_menu_release();
-    menu_pause_owned = false;
+  bool timed_out = !ready && sys_tick() - freeze_started > sys_tick_freq() / 5;
+  if ((failed || timed_out) && __atomic_load_n(&gfx_freeze_request, __ATOMIC_ACQUIRE)) {
     __atomic_store_n(&gfx_freeze_request, 0, __ATOMIC_RELEASE);
-    gfx_notice("menu freeze unavailable; running live");
+    log_printf("menu pause: backdrop %s; using native pause", failed ? "failed" : "timed out");
+  }
+  if (!menu_pause_attempted && (ready || failed || timed_out)) {
+    menu_pause_attempted = true;
+    menu_pause_owned = pause_menu_acquire();
+    if (!menu_pause_owned) {
+      __atomic_store_n(&gfx_freeze_request, 0, __ATOMIC_RELEASE);
+      gfx_notice("native pause unavailable; running live");
+    }
   }
 }
 
@@ -376,9 +372,6 @@ static void activate_item(menu_item_t *item)
       if (item->action)
         item->action(item);
       break;
-    case MI_BACK:
-      menu_back();
-      break;
     default:
       break;
   }
@@ -458,27 +451,27 @@ static bool number_input(menu_item_t *item)
   return false;
 }
 
-/* a page of text: the page moves, the cursor stays on return (menu_draw keeps the scroll in range) */
-static void scroll_text_input(menu_t *menu, menu_item_t *item)
+/* Scroll a read-only page. menu_draw keeps the scroll in range. */
+static void scroll_text_input(menu_t *menu)
 {
   if (menu_nav_repeat(BTN_DUP))
     menu->scroll--;
   else if (menu_nav_repeat(BTN_DDOWN))
     menu->scroll++;
-  else if (input_pressed() & BTN_A)
-    activate(item);
 }
 
 void menu_input(void)
 {
   menu_t *menu = menu_current;
-  if (!menu || !menu->n_items)
+  if (!menu)
     return;
-  update_stick_navigation();
   if (input_pressed() & BTN_B) {
     menu_back();
     return;
   }
+  if (!menu->n_items)
+    return;
+  update_stick_navigation();
   menu_item_t *item = &menu->items[menu->selected];
   if (menu_editing) {
     if (menu_editing != item || !item->edit || !item->edit(item))
@@ -486,23 +479,23 @@ void menu_input(void)
     return;
   }
   if (menu->scroll_text) {
-    scroll_text_input(menu, item);
+    scroll_text_input(menu);
     return;
   }
   if (item->kind == MI_NUMBER && number_input(item))
     return;
   /* The root is presented in a two-column grid. Keep D-pad movement spatial:
    * vertical steps between rows, horizontal steps between columns. */
-  if (!menu->parent && menu->n_items == 9 && menu->items[0].kind == MI_SUBMENU) {
+  if (!menu->parent && menu->n_items == 8 && menu->items[0].kind == MI_SUBMENU) {
     int selected = menu->selected;
     if (menu_nav_repeat(BTN_DLEFT) && selected < 8 && (selected & 1))
       menu->selected = selected - 1;
     else if (menu_nav_repeat(BTN_DRIGHT) && selected < 8 && !(selected & 1))
       menu->selected = selected + 1;
     else if (menu_nav_repeat(BTN_DUP))
-      menu->selected = selected == 8 ? 6 : selected >= 2 ? selected - 2 : selected;
+      menu->selected = selected >= 2 ? selected - 2 : selected;
     else if (menu_nav_repeat(BTN_DDOWN))
-      menu->selected = selected >= 6 ? 8 : selected + 2;
+      menu->selected = selected < 6 ? selected + 2 : selected;
     else if (input_pressed() & BTN_A)
       activate(item);
     return;
@@ -747,7 +740,7 @@ static const char *current_hint(const menu_t *menu)
   if (menu_editing && menu_editing->edit_hint)
     hint = T(menu_editing->edit_hint);
   if (menu->scroll_text)
-    hint = T("d-up/down: scroll   A: return");
+    hint = T("D-pad up/down: scroll");
   return hint;
 }
 
@@ -797,7 +790,7 @@ static void update_scroll(menu_t *menu, int pinned, int visible)
   int top = menu->selected;
   while (top > pinned && !selectable(&menu->items[top - 1]) && menu->selected - (top - 1) < visible)
     top--;
-  /* and the same below it: the read-only lines under a menu's return */
+  /* Keep adjacent read-only lines visible below the selected item. */
   int bottom = menu->selected;
   while (bottom + 1 < menu->n_items && !selectable(&menu->items[bottom + 1]) && bottom + 1 - top < visible)
     bottom++;
@@ -867,7 +860,7 @@ void menu_draw(void)
   if (!menu)
     return;
   menu_update_pause();
-  if (!menu->parent && menu->n_items == 9 && menu->items[0].kind == MI_SUBMENU) {
+  if (!menu->parent && menu->n_items == 8 && menu->items[0].kind == MI_SUBMENU) {
     static const char *const descriptions[8] = {
       "Position and player", "Movement and cheats",
       "Collision and actors", "Maps and entrances",
@@ -889,16 +882,15 @@ void menu_draw(void)
       gfx_text(col, row, i == menu->selected ? GFX_TITLE : GFX_NORMAL, label);
       gfx_text(col + 2, row + 1, GFX_DIM, descriptions[i]);
     }
-    gfx_text(4, 22, menu->selected == 8 ? GFX_SELECTED : GFX_NORMAL,
-             menu->selected == 8 ? "> Close" : "  Close");
-    gfx_text(2, 24, GFX_DIM, "D-PAD  Move     A  Select     B  Back     R + PLUS  Close");
+    gfx_text(2, 24, GFX_DIM, "D-PAD  Move     A  Select     B / R + PLUS  Close");
     gfx_end();
     return;
   }
   const char *hint = current_hint(menu);
   if (menu_editing && menu_editing->edit_alone) { /* out of the way of what's being moved */
     gfx_begin();
-    gfx_text(0, 0, GFX_TITLE, T(menu->title));
+    gfx_compact();
+    gfx_text(2, 0, GFX_TITLE, T(menu->title));
     gfx_text(ITEM_COL, 2, GFX_DIM, hint ? hint : "");
     gfx_end();
     return;
@@ -928,8 +920,9 @@ void menu_draw(void)
 
   /* item rows that fit on screen: the title and a blank line above them; a blank and the hint below
    * (always room for the hint, so the list doesn't jump) */
-  int first_item_y = title_rows + 1;
-  int visible = gfx_menu_rows - first_item_y - 1 - hint_rows;
+  int first_item_y = title_rows + 3;
+  int footer = gfx_menu_rows - 2;
+  int visible = footer - first_item_y - 1 - hint_rows;
   if (visible < MIN_SCROLL_ROWS)
     visible = MIN_SCROLL_ROWS;
   /* the first `pinned` items stay at the top; the rest scroll under them in `visible` rows */
@@ -940,13 +933,20 @@ void menu_draw(void)
   update_scroll(menu, pinned, visible);
 
   gfx_begin();
+  gfx_text(2, 0, GFX_DIM, "SLOPERINAGZ  /  PRACTICE MENU");
+  gfx_text(53, 0, menu_pause_owned ? GFX_NOTICE : GFX_TITLE,
+           menu_pause_owned ? "PAUSED" : "LIVE");
   for (int k = 0; k < title_rows; k++)
-    gfx_text(0, k, GFX_TITLE, title_lines[k]);
+    gfx_text(2, k + 1, GFX_TITLE, title_lines[k]);
+  gfx_text(2, footer, GFX_DIM, "D-PAD  Move     A  Select     B  Back     R + PLUS  Close");
   for (int row = 0; row < pinned + visible; row++) {
     int index = row < pinned ? row : menu->scroll + row - pinned;
     if (index >= menu->n_items)
       break;
-    draw_item(menu, index, first_item_y + row);
+    int y = first_item_y + row;
+    if (selectable(&menu->items[index]))
+      gfx_menu_row(y, index == menu->selected);
+    draw_item(menu, index, y);
   }
   if (menu->scroll > pinned)
     gfx_text(0, first_item_y + pinned, GFX_DIM, "^");
@@ -959,6 +959,8 @@ void menu_draw(void)
   static const char filler[2] = { FILLER_CHAR, 0 };
   int scrolled_shown = menu->n_items - menu->scroll < visible ? menu->n_items - menu->scroll : visible;
   int hint_y = first_item_y + pinned + scrolled_shown + 1;
+  if (hint_y > footer - hint_rows)
+    hint_y = footer - hint_rows;
   int n_hint_lines = wrap_text(hint, wrap_w, hint_lines, HINT_MAX_ROWS, 0);
   for (int k = 0; k < n_hint_lines; k++)
     gfx_text(ITEM_COL, hint_y + k, GFX_DIM, hint_lines[k][0] ? hint_lines[k] : filler);
