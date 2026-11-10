@@ -894,3 +894,14 @@ either is the trigger. Type `1` is the generic result at `main+0x82C6DC`, which
 can be reached from more than one input. The next capture records player flags
 `+0x28`, contact flags `+0x13D0` and contact tags `+0x13E8` on the frames around
 flow activation. The reaction can consume some of these flags before sampling.
+
+Two further adult Kakariko reproductions selected type `1` at frames 2441 and
+2978. The first active samples were `(-93.464, 106.745, 75.169)` and
+`(-88.486, 112.400, 68.703)`. Both manifests preserve the second event. Its
+previous frame already had type `1`, player flags `0x8000`, contact flags
+`0x180000` and contact tags `0`. In that sample, bit 19 of the contact word
+satisfies the halfword mask `0x208` checked at `main+0x82C604`. The other sampled
+flag inputs were clear. `main+0x5FBC44` sets that bit from a physics-query path.
+The snapshot is after the type was selected, so it does not prove the earlier
+branch or identify the exact query geometry. The trace now logs the first
+sample with a nonzero type for each observed fall flow.

@@ -31,7 +31,7 @@ static struct {
   unsigned frame;
   uint32_t abyss_type;
   vec3f_t before, first, lowest;
-  abyss_sample_t before_inputs, active_inputs;
+  abyss_sample_t decision_inputs, before_inputs, active_inputs;
   bool has_before, has_position;
 } last_fall;
 
@@ -83,6 +83,7 @@ bool diagnostics_fall_frame(void)
   static uintptr_t previous_actor;
   static vec3f_t previous;
   static abyss_sample_t previous_inputs;
+  static abyss_sample_t first_type_inputs;
   if (!z64hd_game || !z64hd_game->event_flow_layout)
     return false;
   bool active = fall_flow_active();
@@ -90,6 +91,10 @@ bool diagnostics_fall_frame(void)
   uintptr_t actor = link_actor();
   bool have_feet = actor && link_drawn_pos(&feet);
   abyss_sample_t inputs = abyss_inputs(actor);
+  if (actor != previous_actor || !inputs.type)
+    first_type_inputs = (abyss_sample_t){0};
+  if (inputs.type && (!first_type_inputs.valid || inputs.type != first_type_inputs.type))
+    first_type_inputs = inputs;
   if (active && !was_active) {
     const char *map = gd_get_str(GD_STR_MAP);
     snprintf(last_fall.map, sizeof(last_fall.map), "%.63s", map ? map : "");
@@ -99,6 +104,7 @@ bool diagnostics_fall_frame(void)
     last_fall.before = previous;
     last_fall.before_inputs = actor == previous_actor ? previous_inputs : (abyss_sample_t){0};
     last_fall.active_inputs = inputs;
+    last_fall.decision_inputs = first_type_inputs;
     last_fall.has_position = false;
     log_printf("fall: DmF_SY_FallDown active frame=%u map=%.30s", last_fall.frame, last_fall.map);
     if (last_fall.has_before)
@@ -106,7 +112,12 @@ bool diagnostics_fall_frame(void)
   }
   if (active && !last_fall.abyss_type && inputs.type) {
     last_fall.abyss_type = inputs.type;
+    if (!last_fall.decision_inputs.valid)
+      last_fall.decision_inputs = inputs;
     log_printf("fall: native abyss type %u", inputs.type);
+    const abyss_sample_t *sample = &last_fall.decision_inputs;
+    log_printf("fall: first type inputs player=%#x contact=%#x tags=%#llx",
+               sample->player_flags, sample->contact_flags, (unsigned long long)sample->contact_tags);
   }
   if (active && have_feet) {
     if (!last_fall.has_position) {
@@ -348,6 +359,7 @@ void diagnostics_dump(bool deep)
     append("Last observed DmF_SY_FallDown frame=%u map=%s\n", last_fall.frame, last_fall.map);
     if (last_fall.abyss_type)
       append("Native abyss type=%u\n", last_fall.abyss_type);
+    append_abyss_inputs("First nonzero type", last_fall.decision_inputs);
     append_abyss_inputs("Previous frame", last_fall.before_inputs);
     append_abyss_inputs("First active frame", last_fall.active_inputs);
     if (last_fall.has_before)
