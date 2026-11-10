@@ -429,6 +429,22 @@ void menu_input(void)
   }
   if (item->kind == MI_NUMBER && number_input(item))
     return;
+  /* The root is presented in a two-column grid. Keep D-pad movement spatial:
+   * vertical steps between rows, horizontal steps between columns. */
+  if (!menu->parent && menu->n_items == 9 && menu->items[0].kind == MI_SUBMENU) {
+    int selected = menu->selected;
+    if (input_repeat(BTN_DLEFT) && selected < 8 && (selected & 1))
+      menu->selected = selected - 1;
+    else if (input_repeat(BTN_DRIGHT) && selected < 8 && !(selected & 1))
+      menu->selected = selected + 1;
+    else if (input_repeat(BTN_DUP))
+      menu->selected = selected == 8 ? 6 : selected >= 2 ? selected - 2 : selected;
+    else if (input_repeat(BTN_DDOWN))
+      menu->selected = selected >= 6 ? 8 : selected + 2;
+    else if (input_pressed() & BTN_A)
+      activate(item);
+    return;
+  }
   bool has_parts = item->n_parts > 1;
   if (input_repeat(BTN_DUP)) {
     if (!item->on_move || !item->on_move(item, -1))
@@ -788,6 +804,33 @@ void menu_draw(void)
   menu_t *menu = menu_current;
   if (!menu)
     return;
+  /* Use the existing safe text renderer for a spacious two-column dashboard.
+   * This is deliberately not a claim of native card/rounded-rectangle support. */
+  if (!menu->parent && menu->n_items == 9 && menu->items[0].kind == MI_SUBMENU) {
+    static const char *const descriptions[8] = {
+      "Position and player", "Movement and cheats",
+      "Collision and actors", "Maps and entrances",
+      "Items and equipment", "Progress and flags",
+      "Watches and diagnostics", "Display and controls"
+    };
+    gfx_begin();
+    gfx_text(3, 1, GFX_TITLE, "SLOPERINAGZ  /  PRACTICE MENU");
+    gfx_text(3, 2, GFX_DIM, menu_pause_world ? "WORLD PAUSED" : "LIVE INSPECTION");
+    gfx_text(3, 3, GFX_DIM, "--------------------------------------------------------");
+    for (int i = 0; i < 8; i++) {
+      int col = (i & 1) ? 33 : 4;
+      int row = 5 + (i / 2) * 4;
+      char label[64];
+      snprintf(label, sizeof(label), "%c %s  >", i == menu->selected ? '>' : ' ', T(menu->items[i].label));
+      gfx_text(col, row, i == menu->selected ? GFX_SELECTED : GFX_NORMAL, label);
+      gfx_text(col + 2, row + 1, GFX_DIM, descriptions[i]);
+    }
+    gfx_text(4, 22, menu->selected == 8 ? GFX_SELECTED : GFX_NORMAL,
+             menu->selected == 8 ? "> Close" : "  Close");
+    gfx_text(4, 24, GFX_DIM, "D-pad: Navigate   A: Select   B: Back   R + Plus: Close");
+    gfx_end();
+    return;
+  }
   const char *hint = current_hint(menu);
   if (menu_editing && menu_editing->edit_alone) { /* out of the way of what's being moved */
     gfx_begin();

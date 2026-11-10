@@ -460,6 +460,10 @@ static void drop(void)
   floating = false;
   levitate_through_walls = false; /* ghost is scoped to one hover session */
   if (moving_link) {
+    /* The CCT can retain horizontal velocity after a ghost hover despite zeroing
+     * the scanned record. Stop it via the queued controller API before handing
+     * collision back, rather than allowing an old impulse on the first frame. */
+    bool stopped = cct_stop_velocity(float_actor);
     bool reset = cct_reset_vertical_velocity(float_actor);
     cct_clear_fall_distance(float_actor);
     landing_actor = float_actor;
